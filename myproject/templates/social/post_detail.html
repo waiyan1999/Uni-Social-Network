@@ -1,0 +1,81 @@
+{% extends "social/base.html" %}
+{% load static %}
+{% block title %}Post #{{ post.id }}{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-lg-8 mx-auto">
+    {% include "social/post_card.html" with post=post %}
+
+    <div class="card">
+      <div class="card-body">
+        <h6 class="mb-3">Comments</h6>
+        <form method="post" action="{% url 'social:comment-add' post.id %}">
+          {% csrf_token %}
+          <div class="input-group mb-3">
+            <input name="body" class="form-control" placeholder="Write a comment..." required>
+            <button class="btn btn-primary" type="submit">Post</button>
+          </div>
+        </form>
+        {% for c in comments %}
+          <div class="d-flex align-items-start mb-3">
+            <img class="avatar me-2" src="{% if c.author.profile.photo %}{{ c.author.profile.photo.url }}{% else %}{% static 'default-avatar.png' %}{% endif %}">
+            <div class="flex-grow-1">
+              <div>
+                <a class="fw-semibold text-decoration-none" href="{% url 'social:profile-detail' c.author.id %}">
+                 
+                  
+                  
+
+                  {% if c.author.profile.full_name  %}
+                    {{ c.author.profile.full_name }}
+                  {% else %}
+                    {{ c.author.email }}
+                  {% endif %}
+                
+                </a>
+
+
+                 
+
+                <span class="text-muted small">{{ c.created_at|date:"M d, Y H:i" }}</span>
+              </div>
+              <div>{{ c.body|linebreaksbr }}</div>
+              {% if c.author_id == request.user.id %}
+                <form class="mt-1" method="post" action="{% url 'social:comment-delete' c.id %}">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-danger">Delete</button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+        {% empty %}
+          <div class="text-muted">No comments yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+// Like/Save buttons on this page too
+document.querySelectorAll('.like-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const id = btn.dataset.id;
+    const data = await postJSON(`/posts/${id}/like/`, {});
+    if (data.liked !== undefined) {
+      document.getElementById(`like-count-${id}`).textContent = data.likes_count;
+    }
+  });
+});
+document.querySelectorAll('.save-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const id = btn.dataset.id;
+    const data = await postJSON(`/posts/${id}/save/`, {});
+    if (data.saves_count !== undefined) {
+      document.getElementById(`save-count-${id}`).textContent = data.saves_count;
+    }
+  });
+});
+</script>
+{% endblock %}

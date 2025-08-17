@@ -1,0 +1,47 @@
+{% extends "social/base.html" %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-lg-7 mx-auto">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="mb-0">Notifications</h5>
+      <button id="read-all" class="btn btn-sm btn-outline-secondary">Mark all as read</button>
+    </div>
+
+    <div class="list-group">
+      {% for n in notifications %}
+        <div class="list-group-item d-flex justify-content-between align-items-center {% if not n.is_read %}list-group-item-warning{% endif %}">
+          <div>
+            {% if n.actor %}<strong>{{ n.actor.username }}</strong> {% endif %}{{ n.verb }}
+            <span class="text-muted small">{{ n.created_at|date:"M d, Y H:i" }}</span>
+          </div>
+          <button class="btn btn-sm btn-outline-primary mark-read" data-id="{{ n.id }}" {% if n.is_read %}disabled{% endif %}>
+            {% if n.is_read %}Read{% else %}Mark read{% endif %}
+          </button>
+        </div>
+      {% empty %}
+        <div class="alert alert-light border">No notifications.</div>
+      {% endfor %}
+    </div>
+
+    {% include "social/pagination.html" %}
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+document.querySelectorAll('.mark-read').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const id = btn.dataset.id;
+    const data = await postJSON(`/notifications/${id}/read/`, {});
+    if (data.ok) { btn.textContent = 'Read'; btn.disabled = true; }
+  });
+});
+document.getElementById('read-all').addEventListener('click', async () => {
+  const data = await postJSON(`/notifications/read_all/`, {});
+  if (data.ok) {
+    document.querySelectorAll('.mark-read').forEach(b => { b.textContent='Read'; b.disabled=true; });
+  }
+});
+</script>
+{% endblock %}

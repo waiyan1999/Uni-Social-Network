@@ -1,0 +1,24 @@
+{% extends "social/base.html" %}
+{% load static %}
+{% block title %}Following{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-lg-7 mx-auto">
+    <h5 class="mb-3">Following</h5>
+    <div class="list-group">
+      {% for p in profiles %}
+        <a class="list-group-item list-group-item-action d-flex align-items-center gap-3" href="{% url 'social:profile-detail' p.user.id %}">
+          <img class="avatar" src="{% if p.photo %}{{ p.photo.url }}{% else %}{% static 'default-avatar.png' %}{% endif %}">
+          <div>
+            <div class="fw-semibold">{{ p.user.username }}</div>
+            <div class="small text-muted">{{ p.full_name }}</div>
+          </div>
+        </a>
+      {% empty %}
+        <div class="alert alert-light border">Not following anyone yet.</div>
+      {% endfor %}
+    </div>
+    {% include "social/pagination.html" %}
+  </div>
+</div>
+{% endblock %}

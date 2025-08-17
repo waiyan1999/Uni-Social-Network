@@ -1,0 +1,65 @@
+{# expects var: post #}
+{% load static %}
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <img class="avatar" src="{% if post.author.profile.photo %}{{ post.author.profile.photo.url }}{% else %}{% static 'default-avatar.png' %}{% endif %}" alt="">
+      <div>
+        
+
+        <a class="fw-semibold text-decoration-none" href="{% url 'social:profile-detail' post.author.id %}">
+          {% with prof=post.author.profile %}
+            {% if prof and prof.full_name %}
+              {{ prof.full_name }}
+            {% else %}
+              {{ post.author.email }}
+            {% endif %}
+          {% endwith %}
+        </a>
+
+        <div class="text-muted small">{{ post.created_at|date:"M d, Y H:i"}}</div>
+        <div class="text-muted small">{{ post.created_at|timesince }} ago</div>
+      </div>
+      <div class="ms-auto">
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'social:post-detail' post.id %}"> <i class="fa-solid fa-info"></i></a>
+        <button class="btn btn-sm btn-outline-secondary save-btn" data-id="{{ post.id }}"> Save <span class="badge bg-secondary-subtle text-secondary" id="save-count-{{ post.id }}">{{ post.saves_count }}</span></button>
+        {% if request.user.id == post.author_id %}
+          <a class="btn btn-sm btn-outline-primary" href="{% url 'social:post-edit' post.id %}"> <i class="fa-regular fa-pen-to-square"></i></a>
+          <a class="btn btn-sm btn-outline-danger" href="{% url 'social:post-delete' post.id %}"> <i class="fa-regular fa-trash-can"></i> </a>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if post.text %}
+      <p class="mb-2">{{ post.text|linebreaksbr }}</p>
+    {% endif %}
+    {% if post.photo %}
+   <img class="rounded mb-2 w-100 h-100" src="{{ post.photo.url }}" alt="post image">
+    {% endif %}
+
+    
+
+
+       
+
+        <div class="d-flex align-items-center gap-3">
+        <!-- Like button -->
+        <button class="btn btn-sm btn-outline-primary like-btn" data-id="{{ post.id }}">
+          {% if post.is_liked %}
+            <i class="fa-solid fa-thumbs-up me-1"></i>
+          {% else %}
+            <i class="fa-regular fa-thumbs-up me-1"></i>
+          {% endif %}
+          <span class="badge bg-primary-subtle text-primary" id="like-count-{{ post.id }}">
+            {{ post.likes_count }}
+          </span>
+        </button>
+
+
+        
+         
+      <a class="btn btn-sm btn-outline-primary" href="{% url 'social:post-detail' post.id %}"><i class="fa-regular fa-comment"></i></a>
+      <span class="text-muted small">{{ post.comments_count }} comments</span>
+    </div>
+  </div>
+</div>

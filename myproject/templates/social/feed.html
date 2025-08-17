@@ -1,0 +1,38 @@
+{% extends "social/base.html" %}
+{% load static %}
+{% block title %}Feed • Uni Social{% endblock %}
+{% block content %}
+  <div class="row">
+    <div class="col-lg-8 mx-auto">
+      {% for post in posts %}
+        {% include "social/post_card.html" with post=post %}
+      {% empty %}
+        <div class="alert alert-info">No posts yet. Follow someone or create your first post!</div>
+      {% endfor %}
+      {% include "social/pagination.html" %}
+    </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('.like-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const id = btn.dataset.id;
+    const data = await postJSON(`/posts/${id}/like/`, {});
+    if (data.liked !== undefined) {
+      document.getElementById(`like-count-${id}`).textContent = data.likes_count;
+    }
+  });
+});
+document.querySelectorAll('.save-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const id = btn.dataset.id;
+    const data = await postJSON(`/posts/${id}/save/`, {});
+    if (data.saves_count !== undefined) {
+      document.getElementById(`save-count-${id}`).textContent = data.saves_count;
+    }
+  });
+});
+</script>
+{% endblock %}
