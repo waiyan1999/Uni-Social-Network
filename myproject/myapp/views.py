@@ -1,15 +1,16 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
+from django.core.paginator import Paginator,PageNotAnInteger
 from django.db.models import Q
 from django.http import JsonResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 from django.contrib.auth import login, get_user_model,logout
 from .forms import SignUpForm
+from myapp.models import Profile, Follow 
 
 from .models import (
-    User, Profile, Post, Comment, Like, SavedPost, Follow, Notification
+    User, Profile, Post, Comment, Like, SavedPost, Follow, Notification,
 )
 from .forms import PostForm, CommentForm, ProfileForm
 
@@ -43,24 +44,58 @@ class LogoutUserView(LogoutView):
 
 
 
-# -------- Helpers --------
-def _paginate(request, queryset, per_page=10):
-    paginator = Paginator(queryset, per_page)
-    page_number = request.GET.get("page")
-    return paginator.get_page(page_number)
+# # -------- Helpers --------
+# def _paginate(request, queryset, per_page=10):
+#     paginator = Paginator(queryset, per_page)
+#     page_number = request.GET.get("page")
+#     return paginator.get_page(page_number)
 
 
 # -------- Feed / Posts --------
+# @login_required
+# def feed(request):
+#     following_ids = Follow.objects.filter(
+#         follower=request.user
+#     ).values_list("following_id", flat=True)
+
+#     qs = (Post.objects.select_related("author", "author__profile")
+#           .filter(Q(author__in=following_ids) | Q(author=request.user))
+#           .order_by("-created_at"))
+#     page_obj = _paginate(request, qs, per_page=10)
+
+def _paginate(request, queryset, per_page=10):
+    page_number = request.GET.get("page", 1)
+    paginator = Paginator(queryset, per_page)
+    try:
+        page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+    return page_obj
+
+# @login_required
+# def feed(request):
+#     # ALL posts, newest first
+#     qs = (
+#         Post.objects
+#         .select_related("author", "author__profile")
+#         .order_by("-created_at")
+#     )
+#     page_obj = _paginate(request, qs, per_page=10)
+#     return render(request, "social/feed.html", {"page_obj": page_obj})
+
+
 @login_required
 def feed(request):
-    following_ids = Follow.objects.filter(
-        follower=request.user
-    ).values_list("following_id", flat=True)
-
-    qs = (Post.objects.select_related("author", "author__profile")
-          .filter(Q(author__in=following_ids) | Q(author=request.user))
-          .order_by("-created_at"))
+    qs = (
+        Post.objects
+        .select_related("author", "author__profile")
+        .order_by("-created_at")
+    )
     page_obj = _paginate(request, qs, per_page=10)
+    return render(request, "social/feed.html", {"page_obj": page_obj})
+
     
     
     
@@ -140,18 +175,61 @@ def post_edit(request, pk):
     return render(request, "social/post_form.html", {"form": form, "object": post})
 
 
+# @login_required
+# @require_http_methods(["GET", "POST"])
+# def post_delete(request, pk):
+#     post = get_object_or_404(Post, pk=pk)
+#     if post.author_id != request.user.id:
+#         #return HttpResponseForbidden("You can delete only your post.")
+#         messages.warning(request, "You can delete only your post.")
+#     if request.method == "POST":
+#         post.delete()
+#         messages.success(request, "Post deleted.")
+#         return redirect("social:feed")
+#     # Simple inline confirm (you can make a dedicated template if you want)
+#     #return render(request, "social/post_confirm_delete.html", {"post": post})
+#     return redirect("social:feed")
+
+
+# @login_required
+# @require_http_methods(["GET", "POST"])
+# def post_delete(request, pk):
+#     post = get_object_or_404(Post, pk=pk)
+
+#     # Ensure only the author can delete
+#     if post.author_id != request.user.id:
+#         messages.warning(request, "You can delete only your own post.")
+#         return redirect("social:feed")
+
+#     if request.method == "POST":
+#         post.delete()
+#         messages.success(request, "Post deleted.")
+#         return redirect("social:feed")
+
+#     # For GET request, show confirm page (better UX than redirecting directly)
+#     return render(request, "social/post_confirm_delete.html", {"post": post})
+
+
+
 @login_required
-@require_http_methods(["GET", "POST"])
+@require_POST
 def post_delete(request, pk):
     post = get_object_or_404(Post, pk=pk)
+
     if post.author_id != request.user.id:
-        return HttpResponseForbidden("You can delete only your post.")
-    if request.method == "POST":
-        post.delete()
-        messages.success(request, "Post deleted.")
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({"error": "Forbidden"}, status=403)
+        messages.warning(request, "You can delete only your own post.")
         return redirect("social:feed")
-    # Simple inline confirm (you can make a dedicated template if you want)
-    return render(request, "social/post_confirm_delete.html", {"post": post})
+
+    post.delete()
+
+    # AJAX request: no content
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        return HttpResponse(status=204)
+
+    messages.success(request, "Post deleted.")
+    return redirect("social:feed")
 
 
 # -------- Comments --------
@@ -224,20 +302,135 @@ def toggle_follow(request):
 
 
 # -------- Followers / Following lists --------
+# @login_required
+# def followers_list(request, user_id):
+#     follower_ids = Follow.objects.filter(following_id=user_id).values_list("follower_id", flat=True)
+#     qs = Profile.objects.select_related("user").filter(user_id__in=follower_ids).order_by("user__email")
+#     page_obj = _paginate(request, qs, per_page=20)
+#     return render(request, "social/followers_list.html", {"profiles": page_obj, "page_obj": page_obj})
+
+
 @login_required
 def followers_list(request, user_id):
-    follower_ids = Follow.objects.filter(following_id=user_id).values_list("follower_id", flat=True)
-    qs = Profile.objects.select_related("user").filter(user_id__in=follower_ids).order_by("user__username")
-    page_obj = _paginate(request, qs, per_page=20)
-    return render(request, "social/followers_list.html", {"profiles": page_obj, "page_obj": page_obj})
+    # We're viewing the people who FOLLOW this user (target)
+    target = get_object_or_404(User, pk=user_id)
+
+    # IDs of users who follow the target
+    follower_ids = Follow.objects.filter(
+        following=target
+    ).values_list('follower_id', flat=True)
+
+    # Profiles of those followers
+    profiles = list(
+        Profile.objects.filter(user_id__in=follower_ids).select_related('user')
+    )
+
+    # Current user's following set (so we know which button to show)
+    my_following_ids = set(
+        Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+    )
+
+    # Attach a plain attribute for template use
+    for p in profiles:
+        p.is_following = (p.user_id in my_following_ids)
+
+    return render(request, 'social/followers_list.html', {
+        'profiles': profiles,
+        'target_user': target,
+    })
+
+
+# @login_required
+# def following_list(request, user_id):
+#     following_ids = Follow.objects.filter(follower_id=user_id).values_list("following_id", flat=True)
+#     qs = Profile.objects.select_related("user").filter(user_id__in=following_ids).order_by("user__email")
+#     page_obj = _paginate(request, qs, per_page=20)
+#     return render(request, "social/following_list.html", {"profiles": page_obj, "page_obj": page_obj})
+
+
+# @login_required
+# def following_list(request, user_id):
+#     # "Following" of the target profile:
+#     target = get_object_or_404(User, id=user_id)
+
+#     # Profiles the target user is following
+#     base_qs = Profile.objects.filter(
+#         user__in=Follow.objects.filter(follower=target).values('following_id')
+#     ).select_related('user')
+
+#     # Annotate: does *request.user* follow each of them?
+#     following_exists = Follow.objects.filter(
+#         follower=request.user, following_id=OuterRef('user_id')
+#     )
+#     profiles = base_qs.annotate(is_following=Exists(following_exists))
+
+#     return render(request, 'social/following_list.html', {'profiles': profiles})
+
+# @login_required
+# def following_list(request, user_id):
+#     # whose "following" list are we viewing?
+#     target = get_object_or_404(User, pk=user_id)
+
+#     # IDs that target user is following
+#     following_ids = Follow.objects.filter(
+#         follower=target
+#     ).values_list('following_id', flat=True)
+
+#     # Profiles of those users
+#     base_qs = Profile.objects.filter(
+#         user_id__in=following_ids
+#     ).select_related('user')
+
+#     # Annotate whether *current request.user* follows each one
+#     me_follows_them = Follow.objects.filter(
+#         follower=request.user,
+#         following_id=OuterRef('user_id'),
+#     )
+#     profiles = base_qs.annotate(
+#         is_following=Exists(me_follows_them)
+#     ).order_by('user__id')
+
+#     return render(request, 'social/following_list.html', {'profiles': profiles})
 
 
 @login_required
 def following_list(request, user_id):
-    following_ids = Follow.objects.filter(follower_id=user_id).values_list("following_id", flat=True)
-    qs = Profile.objects.select_related("user").filter(user_id__in=following_ids).order_by("user__username")
-    page_obj = _paginate(request, qs, per_page=20)
-    return render(request, "social/following_list.html", {"profiles": page_obj, "page_obj": page_obj})
+    target = get_object_or_404(User, pk=user_id)
+
+    profiles = list(
+        Profile.objects.filter(
+            user__in=Follow.objects.filter(follower=target).values_list('following_id', flat=True)
+        ).select_related('user')
+    )
+
+    my_following = set(
+        Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+    )
+
+    for p in profiles:
+        p.is_following = p.user_id in my_following
+
+    return render(request, 'social/following_list.html', {'profiles': profiles})
+@login_required
+def following_list(request, user_id):
+    target = get_object_or_404(User, pk=user_id)
+
+    profiles = list(
+        Profile.objects.filter(
+            user__in=Follow.objects.filter(follower=target).values_list('following_id', flat=True)
+        ).select_related('user')
+    )
+
+    my_following = set(
+        Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+    )
+
+    for p in profiles:
+        p.is_following = p.user_id in my_following
+
+    return render(request, 'social/following_list.html', {'profiles': profiles})
+
+
 
 
 # -------- Profiles --------
@@ -245,8 +438,15 @@ def following_list(request, user_id):
 def profile_detail(request, user_id):
     profile = get_object_or_404(Profile.objects.select_related("user"), user_id=user_id)
     # show posts (newest first)
+    is_following = Follow.objects.filter(
+        follower=request.user, following=profile.user
+    ).exists()
+
     posts = profile.user.posts.all().order_by("-created_at")
-    return render(request, "social/profile_detail.html", {"profile": profile, "posts": posts})
+    
+    context = {'profile':profile,'posts':posts, 'is_following':is_following}
+    
+    return render(request, "social/profile_detail.html", context)
 
 
 @login_required
@@ -310,5 +510,93 @@ def register(request):
         form = SignUpForm()
 
     return render(request, "registration/register.html", {"form": form, "next": next_url})
+
+
+
+
+from django.shortcuts import render
+
+def about_view(request):
+    return render(request, "social/about.html", {"default_tab": "about"})
+
+def contact_view(request):
+    return render(request, "social/about.html", {"default_tab": "contact"})
+
+def faq_view(request):
+    return render(request, "social/about.html", {"default_tab": "faq"})
+
+
+# from django.shortcuts import render, redirect
+# from django.db.models import Q
+# from django.contrib.auth import get_user_model
+# from myapp.models import Profile, Post   # adjust to your app
+
+# User = get_user_model()
+
+# def search_view(request):
+#     q = (request.GET.get("q") or "").strip()
+#     if not q:
+#         return redirect("social:feed")
+
+#     # People: full_name OR email (case-insensitive)
+#     people = (Profile.objects
+#               .filter(Q(full_name__icontains=q) | Q(user__email__icontains=q))
+#               .select_related("user")
+#               .order_by("full_name", "user__email")[:20])
+
+#     # Posts: body OR author's email OR author's full_name (case-insensitive)
+#     posts = (Post.objects
+#              .filter(
+#                  Q(body__icontains=q) |
+#                  Q(user__email__icontains=q) |
+#                  Q(user__profile__full_name__icontains=q)
+#              )
+#              .select_related("user", "user__profile")
+#              .order_by("-created_at")[:50])
+
+#     return render(request, "social/search_results.html", {
+#         "q": q,
+#         "people": people,
+#         "posts": posts,
+#     })
+
+
+# views.py
+from django.shortcuts import render, redirect
+from django.db.models import Q
+from django.contrib.auth import get_user_model
+from myapp.models import Profile, Post  # adjust app name
+
+User = get_user_model()
+
+def search_view(request):
+    q = (request.GET.get("q") or "").strip()
+    if not q:
+        return redirect("social:feed")
+
+    # People: full_name OR email (case-insensitive)
+    people = (Profile.objects
+              .filter(Q(full_name__icontains=q) | Q(user__email__icontains=q))
+              .select_related("user")
+              .order_by("full_name", "user__email")[:20])
+
+    # Posts: text OR author's email OR author's full_name (case-insensitive)
+    posts = (Post.objects
+             .filter(
+                 Q(text__icontains=q) |
+                 Q(author__email__icontains=q) |
+                 Q(author__profile__full_name__icontains=q)
+             )
+             .select_related("author", "author__profile")
+             .order_by("-created_at")[:50])
+
+    return render(request, "social/search_results.html", {
+        "q": q,
+        "people": people,
+        "posts": posts,
+    })
+
+
+
 
 

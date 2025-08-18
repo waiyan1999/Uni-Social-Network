@@ -1,0 +1,143 @@
+{% extends "social/base.html" %}
+
+{% block title %}About • UniSocial{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-8 mx-auto">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="mb-3">About / Contact / FAQ</h5>
+
+        <!-- Radio group (your snippet, with labels renamed) -->
+        <div class="btn-group mb-3" role="group" aria-label="About/Contact/FAQ">
+          <input type="radio" class="btn-check" name="btnradio" id="btnradio1" autocomplete="off" checked>
+          <label class="btn btn-outline-primary" for="btnradio1">About</label>
+
+          <input type="radio" class="btn-check" name="btnradio" id="btnradio2" autocomplete="off">
+          <label class="btn btn-outline-primary" for="btnradio2">Contact</label>
+
+          <input type="radio" class="btn-check" name="btnradio" id="btnradio3" autocomplete="off">
+          <label class="btn btn-outline-primary" for="btnradio3">FAQ</label>
+        </div>
+
+        <!-- Sections -->
+        <div id="section-about">
+          <h6>What is UniSocial?</h6>
+          <p class="text-muted">
+            UniSocial is a simple campus social network for sharing posts, following classmates,
+            and getting notifications about what matters.
+          </p>
+          <ul class="mb-0">
+            <li>Share updates and photos</li>
+            <li>Follow friends & classmates</li>
+            <li>Real-time notifications</li>
+          </ul>
+        </div>
+
+        <div id="section-contact" class="d-none">
+          <h6>Contact Us</h6>
+          <p class="text-muted">We’d love to hear from you. Choose an option below:</p>
+          <ul class="mb-3">
+            <li>Email: <a href="mailto:support@example.com">support@example.com</a></li>
+            <li>Feedback form: <a href="#" onclick="return false;">Coming soon</a></li>
+          </ul>
+          <div class="alert alert-light border small mb-0">
+            Tip: if you opened this from a user profile, we sometimes prefill the target address via <code>?to=</code>.
+          </div>
+        </div>
+
+        <div id="section-faq" class="d-none">
+          <h6 class="mb-2">Frequently Asked Questions</h6>
+          <div class="accordion" id="faqAcc">
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="q1h">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q1">
+                  How do I follow someone?
+                </button>
+              </h2>
+              <div id="q1" class="accordion-collapse collapse" data-bs-parent="#faqAcc">
+                <div class="accordion-body">
+                  Visit their profile and click <em>Follow</em>. You can unfollow anytime from the same button.
+                </div>
+              </div>
+            </div>
+
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="q2h">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q2">
+                  How do notifications work?
+                </button>
+              </h2>
+              <div id="q2" class="accordion-collapse collapse" data-bs-parent="#faqAcc">
+                <div class="accordion-body">
+                  You’ll see a bell badge in the navbar. On the Notifications page, mark items read or delete them.
+                </div>
+              </div>
+            </div>
+
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="q3h">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#q3">
+                  Can I edit my profile?
+                </button>
+              </h2>
+              <div id="q3" class="accordion-collapse collapse" data-bs-parent="#faqAcc">
+                <div class="accordion-body">
+                  Yes—go to <em>Settings</em> or your profile and click <em>Edit Profile</em>.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div> <!-- /card-body -->
+    </div> <!-- /card -->
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  // map radios -> sections
+  const map = {
+    btnradio1: 'section-about',
+    btnradio2: 'section-contact',
+    btnradio3: 'section-faq'
+  };
+
+  function showSection(sectionId){
+    for (const id of Object.values(map)) {
+      document.getElementById(id)?.classList.add('d-none');
+    }
+    document.getElementById(sectionId)?.classList.remove('d-none');
+  }
+
+  // Preselect via ?tab=about|contact|faq
+  function applyFromQuery(){
+    const params = new URLSearchParams(location.search);
+    const tab = (params.get('tab') || 'about').toLowerCase();
+    const id = tab === 'contact' ? 'btnradio2' : tab === 'faq' ? 'btnradio3' : 'btnradio1';
+    document.getElementById(id).checked = true;
+    showSection(map[id]);
+  }
+
+  // Listen for changes
+  document.addEventListener('change', (e)=>{
+    if (!e.target.matches('input[name="btnradio"]')) return;
+    const id = e.target.id;
+    if (map[id]) {
+      showSection(map[id]);
+      // Keep URL in sync (no reload)
+      const tab = id === 'btnradio2' ? 'contact' : id === 'btnradio3' ? 'faq' : 'about';
+      const url = new URL(location.href);
+      url.searchParams.set('tab', tab);
+      history.replaceState({}, '', url);
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', applyFromQuery);
+})();
+</script>
+{% endblock %}

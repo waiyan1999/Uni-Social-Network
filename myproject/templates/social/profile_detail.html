@@ -1,46 +1,68 @@
 {% extends "social/base.html" %}
 {% load static %}
-{% block title %}Profile • {{ profile.user.username }}{% endblock %}
+{% block title %}Profile • {{ profile.full_name|default:profile.user.email }}{% endblock %}
+
 {% block content %}
 <div class="row">
   <div class="col-lg-8 mx-auto">
     <div class="card mb-3">
       <div class="card-body d-flex align-items-center gap-3">
-        <img class="avatar" style="width:72px;height:72px" src="{% if profile.photo %}{{ profile.photo.url }}{% else %}{% static 'default-avatar.png' %}{% endif %}">
+       
+
+        {% if profile.photo %}
+          <img class="avatar rounded-circle object-fit-cover"
+              style="width:72px;height:72px"
+              src="{{ profile.photo.url }}"
+              alt="{{ profile.full_name|default:profile.user.email }}">
+        {% else %}
+          <span class="avatar d-inline-flex align-items-center justify-content-center rounded-circle bg-secondary text-white"
+                style="width:72px;height:72px; font-size:32px;">
+            <i class="fa-solid fa-user"></i>
+          </span>
+        {% endif %}
+
+
         <div class="flex-grow-1">
           <h5 class="mb-1">
-           {% if profile.full_name %}
-              {{ profile.full_name }}
-           {% else %}
-              {{ profile.user.email }}
-           {% endif %}
+            {{ profile.full_name|default:profile.user.email }}
           </h5>
+          <hr class="my-2">
 
-          <hr>
-
-          
           <div class="text-muted">
-            {{ user.email }}
-            
-            {{ profile.full_name }}
-            
+            {{ profile.user.email }}
             {% if profile.major %} • {{ profile.major }}{% endif %}
-
             {% if profile.year %} • {{ profile.year }}{% endif %}
-
             {% if profile.roll_no %} • #{{ profile.roll_no }}{% endif %}
           </div>
+
+          {% if profile.bio %}
           <div class="small text-muted">{{ profile.bio }}</div>
+          {% endif %}
+
           <div class="mt-2 small">
             <span class="me-3">Posts: <strong>{{ profile.posts_count }}</strong></span>
-            <a class="me-3" href="{% url 'social:followers-list' profile.user.id %}">Followers: <strong>{{ profile.followers_count }}</strong></a>
-            <a class="me-3" href="{% url 'social:following-list' profile.user.id %}">Following: <strong>{{ profile.following_count }}</strong></a>
+            <a class="me-3" href="{% url 'social:followers-list' profile.user.id %}">
+              Followers: <strong id="followers-count">{{ profile.followers_count }}</strong>
+            </a>
+            <a class="me-3" href="{% url 'social:following-list' profile.user.id %}">
+              Following: <strong>{{ profile.following_count }}</strong>
+            </a>
           </div>
         </div>
+
         {% if request.user.id != profile.user.id %}
-        <button id="follow-btn" class="btn btn-primary" data-user="{{ profile.user.id }}">Follow / Unfollow</button>
+          <button id="follow-btn"
+                  class="btn {% if is_following %}btn-outline-danger{% else %}btn-outline-primary{% endif %}"
+                  data-user-id="{{ profile.user.id }}"
+                  data-following="{% if is_following %}1{% else %}0{% endif %}">
+            {% if is_following %}
+              <i class="fa-solid fa-user-minus"></i> Unfollow
+            {% else %}
+              <i class="fa-solid fa-user-plus"></i> Follow
+            {% endif %}
+          </button>
         {% else %}
-        <a class="btn btn-outline-secondary" href="{% url 'social:profile-edit' %}">Edit Profile</a>
+          <a class="btn btn-outline-primary btn-sm" href="{% url 'social:profile-edit' %}">Edit Profile</a>
         {% endif %}
       </div>
     </div>
@@ -54,14 +76,76 @@
   </div>
 </div>
 {% endblock %}
+
 {% block extra_js %}
 <script>
-const followBtn = document.getElementById('follow-btn');
-if (followBtn) {
-  followBtn.addEventListener('click', async () => {
-    const uid = followBtn.dataset.user;
-    const data = await postJSON("{% url 'social:follow-toggle' %}", {user_id: uid});
-    // Optional: flash a toast or adapt button label using data.following
+// --- CSRF + JSON helper (local to this page) ---
+function getCookie(name){const v=`; ${document.cookie}`.split(`; ${name}=`);return v.length===2?decodeURIComponent(v.pop().split(';').shift()):null;}
+const CSRF = getCookie('csrftoken');
+async function apiFetch(url,{method='GET',data=null,headers={}}={}){
+  const opts={method,headers:{'X-Requested-With':'XMLHttpRequest',...headers}};
+  if(!['GET','HEAD'].includes(method)){
+    opts.headers['Content-Type']='application/json';
+    if(CSRF) opts.headers['X-CSRFToken']=CSRF;
+    if(data) opts.body=JSON.stringify(data);
+  }
+  const res=await fetch(url,opts);
+  let json=null; try{ json=await res.json(); }catch(_){}
+  return {ok:res.ok,status:res.status,data:json};
+}
+
+// --- Toggle via FollowToggle API ---
+async function toggleFollowAPI(userId, shouldFollow){
+  // Endpoint from DRF: POST /api/follow/ with {user_id, action: 'follow'|'unfollow'}
+  const {ok,data}=await apiFetch('/api/follow/', {
+    method:'POST',
+    data:{ user_id: userId, action: shouldFollow ? 'follow' : 'unfollow' }
+  });
+  return ok && (!data || data.ok !== false);
+}
+
+// --- Wire the button ---
+const btn = document.getElementById('follow-btn');
+if (btn) {
+  btn.addEventListener('click', async () => {
+    const userId = btn.dataset.userId;
+    const isFollowing = btn.dataset.following === '1';
+
+    btn.disabled = true;
+    try {
+      const success = await toggleFollowAPI(userId, !isFollowing);
+      if (success) {
+        // Update button look/text
+        if (isFollowing) {
+          // Now unfollowed
+          btn.dataset.following = '0';
+          btn.classList.remove('btn-outline-danger');
+          btn.classList.add('btn-outline-primary');
+          btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Follow';
+
+          // Decrement follower count if viewing *their* profile
+          const countEl = document.getElementById('followers-count');
+          if (countEl) {
+            const n = parseInt(countEl.textContent || '0', 10) || 0;
+            countEl.textContent = Math.max(0, n - 1);
+          }
+        } else {
+          // Now followed
+          btn.dataset.following = '1';
+          btn.classList.remove('btn-outline-primary');
+          btn.classList.add('btn-outline-danger');
+          btn.innerHTML = '<i class="fa-solid fa-user-minus"></i> Unfollow';
+
+          const countEl = document.getElementById('followers-count');
+          if (countEl) {
+            const n = parseInt(countEl.textContent || '0', 10) || 0;
+            countEl.textContent = n + 1;
+          }
+        }
+      }
+    } finally {
+      btn.disabled = false;
+    }
   });
 }
 </script>

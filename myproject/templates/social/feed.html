@@ -1,36 +1,85 @@
 {% extends "social/base.html" %}
 {% load static %}
 {% block title %}Feed • Uni Social{% endblock %}
+
 {% block content %}
   <div class="row">
     <div class="col-lg-8 mx-auto">
-      {% for post in posts %}
+      {% for post in page_obj %}
         {% include "social/post_card.html" with post=post %}
       {% empty %}
         <div class="alert alert-info">No posts yet. Follow someone or create your first post!</div>
       {% endfor %}
-      {% include "social/pagination.html" %}
+
+      {# pagination controls #}
+      {% include "social/pagination.html" with page_obj=page_obj %}
     </div>
   </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-document.querySelectorAll('.like-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
+/* -------- helpers (csrf + postJSON) -------- */
+function getCookie(name) {
+  const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+  return m ? m.pop() : '';
+}
+async function postJSON(url, body = {}) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": getCookie("csrftoken"),
+      "X-Requested-With": "XMLHttpRequest",
+    },
+    credentials: "same-origin",
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+/* -------- main (event delegation) -------- */
+document.addEventListener("DOMContentLoaded", () => {
+  // Like buttons
+  document.body.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".like-btn");
+    if (!btn) return;
+
     const id = btn.dataset.id;
-    const data = await postJSON(`/posts/${id}/like/`, {});
-    if (data.liked !== undefined) {
-      document.getElementById(`like-count-${id}`).textContent = data.likes_count;
+    try {
+      const data = await postJSON(`/posts/${id}/like/`, {});
+      if (typeof data.likes_count !== "undefined") {
+        const countEl = document.getElementById(`like-count-${id}`);
+        if (countEl) countEl.textContent = data.likes_count;
+      }
+      if (typeof data.liked !== "undefined") {
+        btn.classList.toggle("active", !!data.liked);
+        btn.setAttribute("aria-pressed", !!data.liked);
+      }
+    } catch (err) {
+      console.error("Like failed:", err);
     }
   });
-});
-document.querySelectorAll('.save-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
+
+  // Save buttons
+  document.body.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".save-btn");
+    if (!btn) return;
+
     const id = btn.dataset.id;
-    const data = await postJSON(`/posts/${id}/save/`, {});
-    if (data.saves_count !== undefined) {
-      document.getElementById(`save-count-${id}`).textContent = data.saves_count;
+    try {
+      const data = await postJSON(`/posts/${id}/save/`, {});
+      if (typeof data.saves_count !== "undefined") {
+        const countEl = document.getElementById(`save-count-${id}`);
+        if (countEl) countEl.textContent = data.saves_count;
+      }
+      if (typeof data.saved !== "undefined") {
+        btn.classList.toggle("active", !!data.saved);
+        btn.setAttribute("aria-pressed", !!data.saved);
+      }
+    } catch (err) {
+      console.error("Save failed:", err);
     }
   });
 });

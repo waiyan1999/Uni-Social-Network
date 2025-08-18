@@ -22,6 +22,7 @@
   {% include "social/nav_bar.html" %}
 
   <main class="container py-4">
+    {% comment %}
     {% if messages %}
       <div class="mb-3">
         {% for m in messages %}
@@ -29,6 +30,66 @@
         {% endfor %}
       </div>
     {% endif %}
+    {% endcomment %}
+
+    <!-- Toasts (top-right) -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1080;">
+  {% if messages %}
+    {% for m in messages %}
+      <div class="toast fade border-0 shadow-lg mb-2
+                  {% if 'success' in m.tags %}text-bg-light
+                  {% elif 'error' in m.tags or 'danger' in m.tags %}text-bg-danger
+                  {% elif 'warning' in m.tags %}text-bg-warning
+                  {% else %}text-bg-info{% endif %}"
+           role="alert" aria-live="assertive" aria-atomic="true"
+           data-bs-autohide="true" data-bs-delay="3000">
+        <div class="toast-header border-0 bg-transparent">
+          <strong class="me-auto">UniSocial</strong>
+
+          <span class="badge text-uppercase ms-2
+                       {% if 'success' in m.tags %}text-bg-success
+                       {% elif 'error' in m.tags or 'danger' in m.tags %}text-bg-danger
+                       {% elif 'warning' in m.tags %}text-bg-warning
+                       {% else %}text-bg-info{% endif %}">
+            {% if 'success' in m.tags %}Success
+            {% elif 'error' in m.tags or 'danger' in m.tags %}Error
+            {% elif 'warning' in m.tags %}Warning
+            {% else %}Info{% endif %}
+          </span>
+
+          <small class="ms-2 opacity-75">just now</small>
+          <button type="button"
+                  class="btn-close ms-2 {% if 'warning' in m.tags %}{% else %}btn-close-dark{% endif %}"
+                  data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body">
+          {{ m }}
+        </div>
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+
+
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll('.toast').forEach(function (el) {
+      new bootstrap.Toast(el).show();
+    });
+  });
+</script>
+
+<style>
+  /* Optional: nicer sizing on large screens */
+  .toast { max-width: 360px; }
+  @media (max-width: 576px) {
+    .toast-container { width: 100%; left: 0; right: 0; }
+    .toast { width: 100%; max-width: none; }
+  }
+</style>
+
+
 
     {% block content %}{% endblock %}
   </main>
@@ -59,6 +120,206 @@
       }).then(r => r.json());
     }
   </script>
-  {% block extra_js %}{% endblock %}
+  <script>
+async function refreshNotifBadge() {
+  try {
+    const res = await fetch('/api/notifications/unread_count/', {
+      headers: {'X-Requested-With': 'XMLHttpRequest'}
+    });
+    if (!res.ok) return;
+    const { count } = await res.json();
+    const badge = document.getElementById('notif-badge');
+    if (!badge) return;
+
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : count;
+      badge.classList.remove('d-none');
+    } else {
+      badge.textContent = '';
+      badge.classList.add('d-none');
+    }
+  } catch (_) {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  refreshNotifBadge();
+  // Optional polling: refresh every 30s
+  setInterval(refreshNotifBadge, 30000);
+});
+
+// make available to other scripts/templates
+window.refreshNotifBadge = refreshNotifBadge;
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // Only wire handlers if the notifications list exists on this page.
+  const notifList = document.getElementById('notif-list');
+  if (!notifList) return;
+
+  document.addEventListener('click', async (e) => {
+    const row = e.target.closest('.list-group-item');
+
+    // Per-item: Mark read
+    if (e.target.closest('.mark-read') && typeof markReadDRF === 'function') {
+      const btn = e.target.closest('.mark-read');
+      const id = btn.dataset.id;
+      btn.disabled = true;
+      try {
+        const ok = await markReadDRF(id);
+        if (ok) {
+          markRowAsRead(row);
+          if (window.refreshNotifBadge) refreshNotifBadge();
+        } else {
+          btn.disabled = false;
+        }
+      } catch (err) {
+        btn.disabled = false;
+        console.error(err);
+      }
+    }
+
+    // Bulk: Mark all read
+    if (e.target.id === 'read-all-drf' && typeof markAllReadDRF === 'function') {
+      e.preventDefault();
+      const b = e.target; b.disabled = true;
+      try {
+        const { ok } = await markAllReadDRF();
+        if (ok) {
+          markAllButtonsRead();
+          if (window.refreshNotifBadge) refreshNotifBadge();
+        }
+      } finally { b.disabled = false; }
+    }
+
+    // Per-item: Delete
+    if (e.target.closest('.delete-item') && typeof deleteItemDRF === 'function') {
+      const btn = e.target.closest('.delete-item');
+      const id = btn.dataset.id;
+      btn.disabled = true;
+      try {
+        const { ok } = await deleteItemDRF(id);
+        if (ok) {
+          removeRow(row);
+          if (window.refreshNotifBadge) refreshNotifBadge();
+        } else {
+          btn.disabled = false;
+        }
+      } catch (err) {
+        btn.disabled = false;
+        console.error(err);
+      }
+    }
+
+    // Bulk: Delete all
+    if (e.target.id === 'delete-all-drf' && typeof deleteAllDRF === 'function') {
+      e.preventDefault();
+      const b = e.target; b.disabled = true;
+      try {
+        const { ok } = await deleteAllDRF();
+        if (ok) {
+          clearAllRows();
+          if (window.refreshNotifBadge) refreshNotifBadge();
+        }
+      } finally { b.disabled = false; }
+    }
+  });
+});
+</script>
+
+<!-- Notifications badge: global helpers only -->
+  <script>
+  function getBadgeEl(){ return document.getElementById('notif-badge'); }
+  function setBadgeCount(n){
+    const el = getBadgeEl(); if(!el) return;
+    if(n > 0){
+      el.textContent = n > 99 ? '99+' : String(n);
+      el.classList.remove('d-none');
+    }else{
+      el.textContent = '';
+      el.classList.add('d-none');
+    }
+  }
+  function getBadgeCount(){
+    const el = getBadgeEl(); if(!el) return 0;
+    const n = parseInt((el.textContent || '').trim(), 10);
+    return Number.isFinite(n) ? n : 0;
+  }
+  function decBadgeCount(by = 1){ setBadgeCount(Math.max(0, getBadgeCount() - by)); }
+
+  async function refreshNotifBadge(){
+    try{
+      const res = await fetch('/api/notifications/unread_count/', {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+        cache: 'no-store'
+      });
+      if(!res.ok) return;
+      const { count } = await res.json();
+      setBadgeCount(count || 0);
+    }catch(_){}
+  }
+  window.refreshNotifBadge = refreshNotifBadge;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    refreshNotifBadge();
+    // setInterval(refreshNotifBadge, 30000); // optional polling
+  });
+  </script>
+
+  <script>
+  // Get CSRF token from cookie (Django default)
+  function getCookie(name) {
+    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? m.pop() : '';
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.delete-post-form').forEach(function (form) {
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const postId = form.dataset.postId;
+        const url = form.getAttribute('action');
+
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': getCookie('csrftoken'),
+              'X-Requested-With': 'XMLHttpRequest'
+            }
+          });
+
+          if (res.status === 204) {
+            // Close modal
+            const modalEl = form.closest('.modal');
+            const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            modal.hide();
+
+            // Remove the post card from the DOM
+            const card = document.getElementById(`post-card-${postId}`);
+            if (card) card.remove();
+          } else if (res.status === 403) {
+            alert('You can delete only your own post.');
+          } else {
+            // Fallback: reload if unexpected
+            window.location.reload();
+          }
+        } catch (err) {
+          console.error(err);
+          window.location.reload();
+        }
+      });
+    });
+  });
+</script>
+
+
+
+  {% block extra_js %}
+
+  
+  
+  {% endblock %}
 </body>
 </html>

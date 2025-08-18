@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'myapp',
     'rest_framework',
     'widget_tweaks',
+    'api'
     
 ]
 
@@ -145,3 +146,19 @@ LOGOUT_REDIRECT_URL = reverse_lazy("social:feed")
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",   # or add JWT if you prefer
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticatedOrReadOnly",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "api.pagination.DefaultPagination",
+}
+
+
+TEMPLATES[0]['OPTIONS']['context_processors'] += [
+    'myapp.context_processors.unread_notifications_count',
+]
+

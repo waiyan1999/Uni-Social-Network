@@ -1,24 +1,107 @@
 {% extends "social/base.html" %}
 {% load static %}
 {% block title %}Followers{% endblock %}
+
 {% block content %}
 <div class="row">
   <div class="col-lg-7 mx-auto">
     <h5 class="mb-3">Followers</h5>
-    <div class="list-group">
+
+    <div id="followers-list" class="list-group">
       {% for p in profiles %}
-        <a class="list-group-item list-group-item-action d-flex align-items-center gap-3" href="{% url 'social:profile-detail' p.user.id %}">
-          <img class="avatar" src="{% if p.photo %}{{ p.photo.url }}{% else %}{% static 'default-avatar.png' %}{% endif %}">
-          <div>
-            <div class="fw-semibold">{{ p.user.username }}</div>
-            <div class="small text-muted">{{ p.full_name }}</div>
-          </div>
-        </a>
+        <div class="list-group-item d-flex align-items-center justify-content-between mb-2">
+          <!-- Left: avatar + name + email -->
+          <a class="d-flex align-items-center gap-3 text-decoration-none flex-grow-1"
+             href="{% url 'social:profile-detail' p.user.id %}">
+            <img class="avatar"
+                 src="{% if p.photo %}{{ p.photo.url }}{% else %}{% static 'default-avatar.png' %}{% endif %}"
+                 alt="{{ p.full_name|default:p.user.email }}">
+            <div>
+              <div class="fw-semibold">{{ p.full_name|default:p.user.email }}</div>
+              <div class="small text-muted">{{ p.user.email }}</div>
+            </div>
+          </a>
+
+          <!-- Right: Follow / Unfollow (hide if it's me) -->
+          {% if request.user.id != p.user.id %}
+          <button
+            class="btn btn-sm follow-toggle {% if p.is_following %}btn-outline-danger{% else %}btn-outline-primary{% endif %}"
+            data-user-id="{{ p.user.id }}"
+            data-following="{% if p.is_following %}1{% else %}0{% endif %}">
+            {% if p.is_following %}
+              <i class="fa-solid fa-user-minus"></i> Unfollow
+            {% else %}
+              <i class="fa-solid fa-user-plus"></i> Follow
+            {% endif %}
+          </button>
+          {% endif %}
+        </div>
       {% empty %}
         <div class="alert alert-light border">No followers yet.</div>
       {% endfor %}
     </div>
+
     {% include "social/pagination.html" %}
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// --- CSRF + JSON helper (local to this page) ---
+function getCookie(name){const v=`; ${document.cookie}`.split(`; ${name}=`);return v.length===2?decodeURIComponent(v.pop().split(';').shift()):null;}
+const CSRF = getCookie('csrftoken');
+async function apiFetch(url,{method='GET',data=null,headers={}}={}){
+  const opts={method,headers:{'X-Requested-With':'XMLHttpRequest',...headers}};
+  if(!['GET','HEAD'].includes(method)){
+    opts.headers['Content-Type']='application/json';
+    if(CSRF) opts.headers['X-CSRFToken']=CSRF;
+    if(data) opts.body=JSON.stringify(data);
+  }
+  const res=await fetch(url,opts);
+  let json=null; try{ json=await res.json(); }catch(_){}
+  return {ok:res.ok,status:res.status,data:json};
+}
+
+// --- FollowToggle API wrapper ---
+async function toggleFollowAPI(userId, shouldFollow){
+  const {ok,data}=await apiFetch('/api/follow/', {
+    method:'POST',
+    data:{ user_id: userId, action: shouldFollow ? 'follow' : 'unfollow' }
+  });
+  return ok && (!data || data.ok !== false);
+}
+
+// --- Event delegation for all follow/unfollow buttons on this page ---
+document.addEventListener('click', async (e)=>{
+  const btn = e.target.closest('.follow-toggle');
+  if(!btn) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const userId = btn.dataset.userId;
+  const isFollowing = btn.dataset.following === '1';
+  btn.disabled = true;
+
+  try{
+    const success = await toggleFollowAPI(userId, !isFollowing);
+    if(success){
+      // Flip state + update appearance/text
+      btn.dataset.following = isFollowing ? '0' : '1';
+      if(isFollowing){
+        btn.classList.remove('btn-outline-danger');
+        btn.classList.add('btn-outline-primary');
+        btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Follow';
+      }else{
+        btn.classList.remove('btn-outline-primary');
+        btn.classList.add('btn-outline-danger');
+        btn.innerHTML = '<i class="fa-solid fa-user-minus"></i> Unfollow';
+      }
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
 {% endblock %}

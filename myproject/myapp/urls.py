@@ -42,4 +42,11 @@ urlpatterns = [
     path("login/",  EmailLoginView.as_view(), name="login"),
     path("logout/", LogoutUserView.as_view(next_page="social:feed"), name="logout"),
     path("signup/", signup_view, name="signup"),
+    
+    
+    path("about/", views.about_view, name="about"),
+    path("contact/", views.contact_view, name="contact"),
+    path("faq/", views.faq_view, name="faq"),
+    
+    path("search/", views.search_view, name="search"),
 ]

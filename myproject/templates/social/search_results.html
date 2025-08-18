@@ -1,0 +1,55 @@
+{% extends "social/base.html" %}
+{% load static %}
+{% block title %}Search • {{ q }}{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-8 mx-auto">
+    <h5 class="mb-3">Search results for “{{ q }}”</h5>
+
+    <div class="mb-4">
+      <h6 class="text-uppercase small text-muted mb-2">People</h6>
+      {% if people %}
+        <div class="list-group">
+          {% for p in people %}
+            <a class="list-group-item list-group-item-action d-flex align-items-center gap-3"
+               href="{% url 'social:profile-detail' p.user.id %}">
+
+              {% if p.photo %}
+              <img class="avatar rounded-circle object-fit-cover"
+                  src="{{ p.photo.url }}"
+                  alt="{{ p.full_name|default:p.user.email }}">
+            {% else %}
+              <span class="avatar d-inline-flex align-items-center justify-content-center rounded-circle bg-secondary text-white"
+                    style="width:40px;height:40px; font-size:16px;">
+                <i class="fa-solid fa-user"></i>
+              </span>
+            {% endif %}
+
+
+
+              <div>
+                <div class="fw-semibold">{{ p.full_name|default:p.user.email }}</div>
+                <div class="small text-muted">{{ p.user.email }}</div>
+              </div>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="alert alert-light border mb-0">No people found.</div>
+      {% endif %}
+    </div>
+
+    <div class="mb-4">
+      <h6 class="text-uppercase small text-muted mb-2">Posts</h6>
+      {% if posts %}
+        {% for post in posts %}
+          {% include "social/post_card.html" with post=post %}
+        {% endfor %}
+      {% else %}
+        <div class="alert alert-light border mb-0">No posts found.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
