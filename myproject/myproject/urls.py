@@ -22,7 +22,7 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include(('myapp.urls','social'),namespace='social')),
-    path('accounts/', include(('myapp.urls', 'account'), namespace='account')),
+    path('accounts/', include(('myapp.urls', 'user-account'), namespace='user-account')),
     path("api/", include("api.urls")),
           # separate accounts app
 ]

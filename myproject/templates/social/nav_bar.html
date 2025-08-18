@@ -99,7 +99,7 @@
               </li>
               <li><hr class="dropdown-divider"></li>
               <li class="px-3">
-                <form method="post" action="{% url 'account:logout' %}" class="m-0">
+                <form method="post" action="{% url 'user-account:logout' %}" class="m-0">
                   {% csrf_token %}
                   <button type="submit" class="btn btn-sm w-100 btn-outline-danger">
                     <i class="fa-solid fa-right-from-bracket me-2"></i> Logout
@@ -110,7 +110,7 @@
           </li>
         {% else %}
           <li class="nav-item">
-            <a class="btn btn-sm btn-primary" href="{% url 'account:login' %}">Login</a>
+            <a class="btn btn-sm btn-primary" href="{% url 'user-account:login' %}">Login</a>
           </li>
         {% endif %}
       </ul>
