@@ -1,10 +1,10 @@
 # api/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-
+from api.views_unread import unread_count
 from .views import (
     UserViewSet, ProfileViewSet, PostViewSet, CommentViewSet,
-    SavedPostViewSet, NotificationViewSet,FollowToggleAPIView
+    SavedPostViewSet, NotificationViewSet, FollowToggleAPIView
 )
 
 router = DefaultRouter()
@@ -17,5 +17,6 @@ router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path('', include(router.urls)),
-     path('follow/', FollowToggleAPIView.as_view(), name='api-follow-toggle'),
+    path('follow/', FollowToggleAPIView.as_view(), name='api-follow-toggle'),
+    path("notifications/unread_count/", unread_count, name="api-unread-count"),
 ]

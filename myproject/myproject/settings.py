@@ -40,7 +40,9 @@ INSTALLED_APPS = [
     'myapp',
     'rest_framework',
     'widget_tweaks',
-    'api'
+    'api',
+    'accounts',
+    "django.contrib.humanize",
     
 ]
 
@@ -161,4 +163,6 @@ REST_FRAMEWORK = {
 TEMPLATES[0]['OPTIONS']['context_processors'] += [
     'myapp.context_processors.unread_notifications_count',
 ]
+
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 

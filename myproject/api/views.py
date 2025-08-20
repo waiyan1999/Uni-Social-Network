@@ -195,39 +195,39 @@ class SavedPostViewSet(mixins.ListModelMixin,
 #         updated = qs.update(is_read=True)
 #         return Response({'ok': True, 'updated': updated}, status=status.HTTP_200_OK)
 
-from rest_framework import viewsets, permissions, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from api.serializers import NotificationSerializer
-from myapp.models import Notification
+# from rest_framework import viewsets, permissions, status
+# from rest_framework.decorators import action
+# from rest_framework.response import Response
+# from api.serializers import NotificationSerializer
+# from myapp.models import Notification
 
-class NotificationViewSet(viewsets.ModelViewSet):
-    serializer_class = NotificationSerializer
-    permission_classes = [permissions.IsAuthenticated]
+# class NotificationViewSet(viewsets.ModelViewSet):
+#     serializer_class = NotificationSerializer
+#     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
-        return (Notification.objects
-                .filter(recipient=self.request.user)
-                .order_by('-created_at'))
+#     def get_queryset(self):
+#         return (Notification.objects
+#                 .filter(recipient=self.request.user)
+#                 .order_by('-created_at'))
 
-    # PATCH /api/notifications/{id}/ {"is_read": true} works via partial_update()
+#     # PATCH /api/notifications/{id}/ {"is_read": true} works via partial_update()
 
-    @action(detail=False, methods=['post'], url_path='mark_all_read')
-    def mark_all_read(self, request):
-        qs = self.get_queryset().filter(is_read=False)
-        updated = qs.update(is_read=True)
-        return Response({'ok': True, 'updated': updated})
+#     @action(detail=False, methods=['post'], url_path='mark_all_read')
+#     def mark_all_read(self, request):
+#         qs = self.get_queryset().filter(is_read=False)
+#         updated = qs.update(is_read=True)
+#         return Response({'ok': True, 'updated': updated})
 
-    @action(detail=False, methods=['post'], url_path='delete_all')
-    def delete_all(self, request):
-        # Optionally: only delete read ones by filtering is_read=True
-        deleted, _ = self.get_queryset().delete()
-        return Response({'ok': True, 'deleted': deleted})
+#     @action(detail=False, methods=['post'], url_path='delete_all')
+#     def delete_all(self, request):
+#         # Optionally: only delete read ones by filtering is_read=True
+#         deleted, _ = self.get_queryset().delete()
+#         return Response({'ok': True, 'deleted': deleted})
     
-    @action(detail=False, methods=['get'], url_path='unread_count')
-    def unread_count(self, request):
-        count = self.get_queryset().filter(is_read=False).count()
-        return Response({'count': count})
+#     @action(detail=False, methods=['get'], url_path='unread_count')
+#     def unread_count(self, request):
+#         count = self.get_queryset().filter(is_read=False).count()
+#         return Response({'count': count})
     
 
 # api/views.py
@@ -263,3 +263,59 @@ class FollowToggleAPIView(APIView):
         else:  # unfollow
             Follow.objects.filter(follower=request.user, following=target).delete()
             return Response({'ok': True, 'status': 'unfollowed'})
+
+
+# social/api/views.py
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.db.models import Q
+from myapp.models import Notification
+from .serializers import NotificationSerializer
+
+class IsRecipient(permissions.BasePermission):
+    """Ensure users can only access their own notifications."""
+    def has_object_permission(self, request, view, obj):
+        return obj.recipient_id == request.user.id
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    """
+    Endpoints:
+      GET    /api/notifications/           -> list recipient's notifications
+      GET    /api/notifications/{id}/      -> detail (for modal)
+      PATCH  /api/notifications/{id}/      -> update (e.g., {"is_read": true})
+      DELETE /api/notifications/{id}/      -> delete one
+
+    Custom actions:
+      POST   /api/notifications/mark_all_read/ -> mark all as read
+      POST   /api/notifications/delete_all/    -> delete all
+    """
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated, IsRecipient]
+
+    def get_queryset(self):
+        user = self.request.user
+        return Notification.objects.filter(recipient=user)
+
+    def perform_update(self, serializer):
+        # Harden updates to only allow toggling is_read if you want:
+        allowed = {'is_read'}
+        data = {k: v for k, v in serializer.validated_data.items() if k in allowed}
+        serializer.save(**data)
+
+    @action(detail=False, methods=['POST'])
+    def mark_all_read(self, request):
+        qs = self.get_queryset().filter(is_read=False)
+        updated = qs.update(is_read=True)
+        return Response({'marked_read': updated})
+
+    @action(detail=False, methods=['POST'])
+    def delete_all(self, request):
+        count = self.get_queryset().count()
+        self.get_queryset().delete()
+        return Response({'deleted': count}, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['get'], url_path='unread_count')
+    def unread_count(self, request):
+        count = self.get_queryset().filter(is_read=False).count()
+        return Response({'count': count})

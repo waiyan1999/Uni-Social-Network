@@ -1,87 +1,34 @@
 {% extends "social/base.html" %}
 {% load static %}
+
 {% block title %}Feed • Uni Social{% endblock %}
 
 {% block content %}
-  <div class="row">
-    <div class="col-lg-8 mx-auto">
-      {% for post in page_obj %}
-        {% include "social/post_card.html" with post=post %}
-      {% empty %}
-        <div class="alert alert-info">No posts yet. Follow someone or create your first post!</div>
-      {% endfor %}
+<div class="row">
+  <div class="col-lg-8 mx-auto">
 
-      {# pagination controls #}
-      {% include "social/pagination.html" with page_obj=page_obj %}
+    {# Optional: quick composer link #}
+    <div class="d-flex justify-content-end mb-3">
+      <a class="btn btn-primary" href="{% url 'social:post-create' %}">
+        <i class="fa-regular fa-square-plus me-1"></i> New Post
+      </a>
     </div>
+
+    {# Posts #}
+    {% for post in page_obj %}
+      {% include "social/post_card.html" with post=post %}
+    {% empty %}
+      <div class="alert alert-info">
+        No posts yet. Follow someone or create your first post!
+      </div>
+    {% endfor %}
+
+    {# Pagination controls #}
+    {% include "social/pagination.html" with page_obj=page_obj %}
   </div>
+</div>
 {% endblock %}
 
-{% block extra_js %}
-<script>
-/* -------- helpers (csrf + postJSON) -------- */
-function getCookie(name) {
-  const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-  return m ? m.pop() : '';
-}
-async function postJSON(url, body = {}) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRFToken": getCookie("csrftoken"),
-      "X-Requested-With": "XMLHttpRequest",
-    },
-    credentials: "same-origin",
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-/* -------- main (event delegation) -------- */
-document.addEventListener("DOMContentLoaded", () => {
-  // Like buttons
-  document.body.addEventListener("click", async (e) => {
-    const btn = e.target.closest(".like-btn");
-    if (!btn) return;
-
-    const id = btn.dataset.id;
-    try {
-      const data = await postJSON(`/posts/${id}/like/`, {});
-      if (typeof data.likes_count !== "undefined") {
-        const countEl = document.getElementById(`like-count-${id}`);
-        if (countEl) countEl.textContent = data.likes_count;
-      }
-      if (typeof data.liked !== "undefined") {
-        btn.classList.toggle("active", !!data.liked);
-        btn.setAttribute("aria-pressed", !!data.liked);
-      }
-    } catch (err) {
-      console.error("Like failed:", err);
-    }
-  });
-
-  // Save buttons
-  document.body.addEventListener("click", async (e) => {
-    const btn = e.target.closest(".save-btn");
-    if (!btn) return;
-
-    const id = btn.dataset.id;
-    try {
-      const data = await postJSON(`/posts/${id}/save/`, {});
-      if (typeof data.saves_count !== "undefined") {
-        const countEl = document.getElementById(`save-count-${id}`);
-        if (countEl) countEl.textContent = data.saves_count;
-      }
-      if (typeof data.saved !== "undefined") {
-        btn.classList.toggle("active", !!data.saved);
-        btn.setAttribute("aria-pressed", !!data.saved);
-      }
-    } catch (err) {
-      console.error("Save failed:", err);
-    }
-  });
-});
-</script>
-{% endblock %}
+{# Important: no per-page like/save scripts here.
+   The global handlers in base.html handle clicks everywhere. #}
+{% block extra_js %}{% endblock %}

@@ -3,7 +3,9 @@
 <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top">
   <div class="container">
     <!-- Brand -->
-    <a class="navbar-brand fw-bold text-primary" href="{% url 'social:feed' %}">University Social Network</a>
+    <a class="navbar-brand fw-bold text-primary" href="{% url 'social:feed' %}">
+      University Social Network
+    </a>
 
     <!-- Toggler -->
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav"
@@ -22,16 +24,16 @@
           <a class="nav-link position-relative" href="{% url 'social:notifications' %}">
             Notifications <i class="fa-regular fa-bell"></i>
             <span id="notif-badge"
-                  class="position-absolute  start-100 translate-middle badge rounded-pill text-bg-danger {% if not unread_count %}d-none{% endif %}">
+                  class="position-absolute start-100 translate-middle badge rounded-pill text-bg-danger {% if not unread_count %}d-none{% endif %}">
               {% if unread_count and unread_count > 0 %}{{ unread_count }}{% endif %}
             </span>
           </a>
         </li>
       </ul>
 
-      {# Search form (moved OUTSIDE the <ul>) #}
+      <!-- Search -->
       <form class="d-flex me-3 my-2 my-lg-0" role="search" action="{% url 'social:search' %}" method="get">
-        <input class="form-control  form-control-sm me-2"
+        <input class="form-control form-control-sm me-2"
                type="search"
                name="q"
                placeholder="Search people & posts"
@@ -45,7 +47,7 @@
       <!-- Right -->
       <ul class="navbar-nav ms-auto align-items-center">
         {% if request.user.is_authenticated %}
-          <!-- Quick action (optional) -->
+          <!-- Quick action -->
           <li class="nav-item me-2 d-none d-lg-block">
             <a class="btn btn-sm btn-primary" href="{% url 'social:post-create' %}">
               <i class="fa-regular fa-square-plus"></i> New Post
@@ -56,25 +58,21 @@
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" role="button"
                data-bs-toggle="dropdown" aria-expanded="false">
-
-
               {% if request.user.profile.photo %}
-            <img src="{{ request.user.profile.photo.url }}"
-                alt="Avatar"
-                style="width:32px;height:32px;border-radius:50%;object-fit:cover;">
-          {% else %}
-            <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-secondary text-white"
-                  style="width:32px;height:32px; font-size:14px;">
-              <i class="fa-solid fa-user"></i>
-            </span>
-          {% endif %}
-
-
-
+                <img src="{{ request.user.profile.photo.url }}"
+                     alt="Avatar"
+                     style="width:32px;height:32px;border-radius:50%;object-fit:cover;">
+              {% else %}
+                <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-secondary text-white"
+                      style="width:32px;height:32px;font-size:14px;">
+                  <i class="fa-solid fa-user"></i>
+                </span>
+              {% endif %}
               <span class="d-none d-sm-inline">
                 {% firstof request.user.profile.full_name request.user.email %}
               </span>
             </a>
+
             <ul class="dropdown-menu dropdown-menu-end">
               <li>
                 <a class="dropdown-item" href="{% url 'social:profile-detail' request.user.id %}">
@@ -99,7 +97,7 @@
               </li>
               <li><hr class="dropdown-divider"></li>
               <li class="px-3">
-                <form method="post" action="{% url 'user-account:logout' %}" class="m-0">
+                <form method="post" action="{% url 'accounts:logout' %}" class="m-0">
                   {% csrf_token %}
                   <button type="submit" class="btn btn-sm w-100 btn-outline-danger">
                     <i class="fa-solid fa-right-from-bracket me-2"></i> Logout
@@ -110,7 +108,10 @@
           </li>
         {% else %}
           <li class="nav-item">
-            <a class="btn btn-sm btn-primary" href="{% url 'user-account:login' %}">Login</a>
+            <a class="btn btn-sm btn-primary" href="{% url 'accounts:login' %}">Login</a>
+          </li>
+          <li class="nav-item ms-2">
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:signup' %}">Sign Up</a>
           </li>
         {% endif %}
       </ul>

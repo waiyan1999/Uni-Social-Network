@@ -1,15 +1,69 @@
 # api/serializers.py
-from django.conf import settings
-from django.contrib.contenttypes.models import ContentType
-from django.db.models import Exists, OuterRef
+
+from django.urls import reverse
+from django.contrib.humanize.templatetags.humanize import naturaltime
 from rest_framework import serializers
 
 from myapp.models import (
     User, Profile, Post, Comment, Like, Follow, SavedPost, Notification
 )
 
+# ------------------------
+# Helpers
+# ------------------------
 
-# --- Small helpers ---
+def display_name(user):
+    """
+    Build a portable display name that works with either Django's AbstractUser
+    or a custom AbstractBaseUser.
+    Order: profile.full_name -> user.get_full_name() -> first/last -> username -> email.
+    """
+    if not user:
+        return "Someone"
+
+    # Profile full name
+    pf = getattr(user, "profile", None)
+    full = getattr(pf, "full_name", None)
+    if full and str(full).strip():
+        return str(full).strip()
+
+    # get_full_name if present (AbstractUser)
+    if hasattr(user, "get_full_name"):
+        try:
+            name = user.get_full_name()
+            if name and str(name).strip():
+                return str(name).strip()
+        except Exception:
+            pass
+
+    # First/last (won't crash even if fields don't exist)
+    first = getattr(user, "first_name", "") or ""
+    last = getattr(user, "last_name", "") or ""
+    fl = f"{first} {last}".strip()
+    if fl:
+        return fl
+
+    # Username / email
+    un = getattr(user, "username", None)
+    if un:
+        return un
+    em = getattr(user, "email", None)
+    if em:
+        return em
+
+    return "Someone"
+
+
+def safe_photo_url(image_field):
+    try:
+        return image_field.url if image_field else None
+    except Exception:
+        return None
+
+
+# ------------------------
+# Users & Profiles
+# ------------------------
 
 class UserMiniSerializer(serializers.ModelSerializer):
     class Meta:
@@ -38,7 +92,9 @@ class UserPublicSerializer(serializers.ModelSerializer):
         fields = ["id", "email", "date_joined", "profile"]
 
 
-# --- Post & Comment ---
+# ------------------------
+# Posts & Comments
+# ------------------------
 
 class CommentSerializer(serializers.ModelSerializer):
     author = UserPublicSerializer(read_only=True)
@@ -50,7 +106,8 @@ class CommentSerializer(serializers.ModelSerializer):
         read_only_fields = ["author", "created_at", "updated_at", "is_edited"]
 
     def get_is_owner(self, obj):
-        u = self.context.get("request").user if self.context.get("request") else None
+        req = self.context.get("request")
+        u = getattr(req, "user", None)
         return bool(u and u.is_authenticated and obj.author_id == u.id)
 
 
@@ -58,7 +115,7 @@ class PostSerializer(serializers.ModelSerializer):
     author = UserPublicSerializer(read_only=True)
     photo = serializers.ImageField(required=False, allow_null=True)
 
-    # fast counts (already denormalized in your model)
+    # denormalized counts
     comments_count = serializers.IntegerField(read_only=True)
     likes_count = serializers.IntegerField(read_only=True)
     saves_count = serializers.IntegerField(read_only=True)
@@ -76,16 +133,17 @@ class PostSerializer(serializers.ModelSerializer):
             "comments_count", "likes_count", "saves_count",
             "is_liked", "is_saved", "is_commented",
         ]
-        read_only_fields = ["author", "is_edited", "created_at", "updated_at",
-                            "comments_count", "likes_count", "saves_count",
-                            "is_liked", "is_saved", "is_commented"]
+    read_only_fields = [
+        "author", "is_edited", "created_at", "updated_at",
+        "comments_count", "likes_count", "saves_count",
+        "is_liked", "is_saved", "is_commented"
+    ]
 
     def get_is_liked(self, obj):
         req = self.context.get("request")
         u = getattr(req, "user", None)
         if not u or not u.is_authenticated:
             return False
-        # If the view annotated is_liked=Exists(...), prefer that
         val = getattr(obj, "is_liked", None)
         if val is not None:
             return bool(val)
@@ -112,7 +170,9 @@ class PostSerializer(serializers.ModelSerializer):
         return Comment.objects.filter(post=obj, author=u).exists()
 
 
-# --- Follow / Saved / Notification (optional detail serializers) ---
+# ------------------------
+# Follow / Saved
+# ------------------------
 
 class FollowSerializer(serializers.ModelSerializer):
     follower = UserPublicSerializer(read_only=True)
@@ -131,69 +191,99 @@ class SavedPostSerializer(serializers.ModelSerializer):
         fields = ["id", "post", "created_at"]
 
 
-# class NotificationSerializer(serializers.ModelSerializer):
-#     recipient = UserMiniSerializer(read_only=True)
-#     actor = UserMiniSerializer(read_only=True)
-#     target_type = serializers.SerializerMethodField()
-
-#     class Meta:
-#         model = Notification
-#         fields = [
-#             "id", "recipient", "actor", "verb",
-#             "target_id", "target_type",
-#             "is_read", "created_at",
-#         ]
-#         read_only_fields = ["recipient", "actor", "created_at"]
-
-#     def get_target_type(self, obj):
-#         return obj.target_ct.model if obj.target_ct else None
-    
-# class NotificationSerializer(serializers.ModelSerializer):
-#     actor_name = serializers.SerializerMethodField()
-
-#     class Meta:
-#         model = Notification
-#         fields = ['id', 'verb', 'is_read', 'created_at', 'actor', 'actor_name']
-#         read_only_fields = ['id', 'created_at', 'actor', 'actor_name']
-
-#     def get_actor_name(self, obj):
-#         # Show full_name (or email) safely
-#         user = getattr(obj, 'actor', None)
-#         if user is None:
-#             return None
-#         return getattr(user, 'full_name', None) or getattr(user, 'email', None)
-
-# api/serializers.py
-from rest_framework import serializers
-from myapp.models import Notification
+# ------------------------
+# Notifications
+# ------------------------
 
 class NotificationSerializer(serializers.ModelSerializer):
     actor_name = serializers.SerializerMethodField()
-    link = serializers.SerializerMethodField()
-    extra = serializers.SerializerMethodField()
+    actor_profile_url = serializers.SerializerMethodField()
+    target_url = serializers.SerializerMethodField()
+    preview = serializers.SerializerMethodField()
+    target_post = serializers.SerializerMethodField()
+    created_at_human = serializers.SerializerMethodField()
 
     class Meta:
         model = Notification
         fields = [
-            'id', 'verb', 'is_read', 'created_at',
-            'actor_name', 'link', 'extra'
+            "id", "verb", "is_read", "created_at",
+            "actor",             # pk of actor (FK)
+            "actor_name",
+            "actor_profile_url",
+            "extra",             # keep raw extra if needed
+            "target_url",
+            "preview",
+            "target_post",
+            "created_at_human",
         ]
-        read_only_fields = ['id', 'created_at', 'actor_name', 'link', 'extra']
+        read_only_fields = [
+            "id", "created_at", "actor", "actor_name",
+            "actor_profile_url", "target_url", "preview",
+            "target_post", "created_at_human",
+        ]
 
+    # ---- actor helpers ----
     def get_actor_name(self, obj):
-        u = getattr(obj, 'actor', None)
-        if not u: return None
-        return getattr(u, 'full_name', None) or getattr(u, 'email', None)
+        return display_name(getattr(obj, "actor", None))
 
-    def get_link(self, obj):
-        # Return a URL to the related target if you have one
-        # Example if you store a GenericForeignKey to Post/Comment:
-        t = getattr(obj, 'target', None)
+    def get_actor_profile_url(self, obj):
+        u = getattr(obj, "actor", None)
+        if not u:
+            return None
         try:
-            return t.get_absolute_url() if t and hasattr(t, 'get_absolute_url') else None
+            return reverse("social:profile-detail", args=[u.id])
         except Exception:
             return None
 
-    def get_extra(self, obj):
-        # If you store metadata (e.g., JSONField like obj.meta)
-        return getattr(obj, 'meta', None)
+    # ---- target helpers ----
+    def _post_id_from_extra(self, obj):
+        ex = getattr(obj, "extra", None) or {}
+        return ex.get("post_id")
+
+    def get_target_url(self, obj):
+        post_id = self._post_id_from_extra(obj)
+        if not post_id:
+            return None
+        try:
+            return reverse("social:post-detail", args=[post_id])
+        except Exception:
+            return None
+
+    def get_preview(self, obj):
+        # comment excerpt > post excerpt > None
+        ex = getattr(obj, "extra", None) or {}
+        return ex.get("comment_excerpt") or ex.get("post_excerpt")
+
+    def get_target_post(self, obj):
+        """
+        Returns a compact post payload for your modal or list:
+        {
+            id, url, text, photo_url,
+            created_at, created_at_human,
+            author_name, author_profile_url
+        }
+        """
+        post_id = self._post_id_from_extra(obj)
+        if not post_id:
+            return None
+
+        try:
+            # IMPORTANT: don't .only() unknown fields like author__first_name/last_name
+            p = Post.objects.select_related("author", "author__profile").get(id=post_id)
+        except Post.DoesNotExist:
+            return None
+
+        return {
+            "id": p.id,
+            "url": reverse("social:post-detail", args=[p.id]),
+            "text": p.text or "",
+            "photo_url": safe_photo_url(getattr(p, "photo", None)),
+            "created_at": p.created_at.isoformat(),
+            "created_at_human": naturaltime(p.created_at),
+            "author_name": display_name(p.author),
+            "author_profile_url": reverse("social:profile-detail", args=[p.author_id]),
+        }
+
+    # ---- convenience ----
+    def get_created_at_human(self, obj):
+        return naturaltime(obj.created_at)

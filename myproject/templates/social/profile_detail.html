@@ -1,5 +1,6 @@
 {% extends "social/base.html" %}
 {% load static %}
+
 {% block title %}Profile • {{ profile.full_name|default:profile.user.email }}{% endblock %}
 
 {% block content %}
@@ -7,20 +8,24 @@
   <div class="col-lg-8 mx-auto">
     <div class="card mb-3">
       <div class="card-body d-flex align-items-center gap-3">
-       
 
         {% if profile.photo %}
-          <img class="avatar rounded-circle object-fit-cover"
-              style="width:72px;height:72px"
-              src="{{ profile.photo.url }}"
-              alt="{{ profile.full_name|default:profile.user.email }}">
+          <img
+            class="avatar rounded-circle object-fit-cover"
+            style="width:72px;height:72px"
+            src="{{ profile.photo.url }}"
+            alt="{{ profile.full_name|default:profile.user.email }}"
+          >
         {% else %}
-          <span class="avatar d-inline-flex align-items-center justify-content-center rounded-circle bg-secondary text-white"
-                style="width:72px;height:72px; font-size:32px;">
+          <span
+            class="avatar d-inline-flex align-items-center justify-content-center rounded-circle bg-secondary text-white"
+            style="width:72px;height:72px;font-size:32px;"
+            aria-label="Avatar"
+            title="{{ profile.full_name|default:profile.user.email }}"
+          >
             <i class="fa-solid fa-user"></i>
           </span>
         {% endif %}
-
 
         <div class="flex-grow-1">
           <h5 class="mb-1">
@@ -30,13 +35,13 @@
 
           <div class="text-muted">
             {{ profile.user.email }}
-            {% if profile.major %} • {{ profile.major }}{% endif %}
-            {% if profile.year %} • {{ profile.year }}{% endif %}
+            {% if profile.major %} • {{ profile.get_major_display }}{% endif %}
+            {% if profile.year %} • {{ profile.get_year_display }}{% endif %}
             {% if profile.roll_no %} • #{{ profile.roll_no }}{% endif %}
           </div>
 
           {% if profile.bio %}
-          <div class="small text-muted">{{ profile.bio }}</div>
+            <div class="small text-muted">{{ profile.bio }}</div>
           {% endif %}
 
           <div class="mt-2 small">
@@ -51,10 +56,13 @@
         </div>
 
         {% if request.user.id != profile.user.id %}
-          <button id="follow-btn"
-                  class="btn {% if is_following %}btn-outline-danger{% else %}btn-outline-primary{% endif %}"
-                  data-user-id="{{ profile.user.id }}"
-                  data-following="{% if is_following %}1{% else %}0{% endif %}">
+          <button
+            id="follow-btn"
+            class="btn {% if is_following %}btn-outline-danger{% else %}btn-outline-primary{% endif %}"
+            data-user-id="{{ profile.user.id }}"
+            data-following="{% if is_following %}1{% else %}0{% endif %}"
+            type="button"
+          >
             {% if is_following %}
               <i class="fa-solid fa-user-minus"></i> Unfollow
             {% else %}
@@ -68,7 +76,8 @@
     </div>
 
     <h6 class="mb-3">Posts</h6>
-    {% for post in profile.user.posts.all|dictsortreversed:'created_at' %}
+    {# Use the 'posts' queryset from the view for proper ordering/perf #}
+    {% for post in posts %}
       {% include "social/post_card.html" with post=post %}
     {% empty %}
       <div class="alert alert-light border">No posts yet.</div>
@@ -79,32 +88,38 @@
 
 {% block extra_js %}
 <script>
-// --- CSRF + JSON helper (local to this page) ---
-function getCookie(name){const v=`; ${document.cookie}`.split(`; ${name}=`);return v.length===2?decodeURIComponent(v.pop().split(';').shift()):null;}
+/* ---- CSRF + JSON helper ---- */
+function getCookie(name){
+  const v = `; ${document.cookie}`.split(`; ${name}=`);
+  return v.length === 2 ? decodeURIComponent(v.pop().split(';').shift()) : null;
+}
 const CSRF = getCookie('csrftoken');
-async function apiFetch(url,{method='GET',data=null,headers={}}={}){
-  const opts={method,headers:{'X-Requested-With':'XMLHttpRequest',...headers}};
-  if(!['GET','HEAD'].includes(method)){
-    opts.headers['Content-Type']='application/json';
-    if(CSRF) opts.headers['X-CSRFToken']=CSRF;
-    if(data) opts.body=JSON.stringify(data);
+
+async function apiFetch(url, {method='GET', data=null, headers={}} = {}){
+  const opts = { method, headers: { 'X-Requested-With': 'XMLHttpRequest', ...headers } };
+  if (!['GET','HEAD'].includes(method)){
+    opts.headers['Content-Type'] = 'application/json';
+    if (CSRF) opts.headers['X-CSRFToken'] = CSRF;
+    if (data) opts.body = JSON.stringify(data);
   }
-  const res=await fetch(url,opts);
-  let json=null; try{ json=await res.json(); }catch(_){}
-  return {ok:res.ok,status:res.status,data:json};
+  const res = await fetch(url, opts);
+  let json = null; try { json = await res.json(); } catch(_){}
+  return { ok: res.ok, status: res.status, data: json };
 }
 
-// --- Toggle via FollowToggle API ---
+/* ---- Toggle via FollowToggle API ----
+   POST /api/follow/ with { user_id, action: 'follow' | 'unfollow' }
+*/
 async function toggleFollowAPI(userId, shouldFollow){
-  // Endpoint from DRF: POST /api/follow/ with {user_id, action: 'follow'|'unfollow'}
-  const {ok,data}=await apiFetch('/api/follow/', {
-    method:'POST',
-    data:{ user_id: userId, action: shouldFollow ? 'follow' : 'unfollow' }
+  const { ok, data } = await apiFetch('/api/follow/', {
+    method: 'POST',
+    data: { user_id: userId, action: shouldFollow ? 'follow' : 'unfollow' }
   });
+  // Treat as success unless API explicitly returns ok:false
   return ok && (!data || data.ok !== false);
 }
 
-// --- Wire the button ---
+/* ---- Wire the button ---- */
 const btn = document.getElementById('follow-btn');
 if (btn) {
   btn.addEventListener('click', async () => {
@@ -115,7 +130,8 @@ if (btn) {
     try {
       const success = await toggleFollowAPI(userId, !isFollowing);
       if (success) {
-        // Update button look/text
+        const countEl = document.getElementById('followers-count');
+
         if (isFollowing) {
           // Now unfollowed
           btn.dataset.following = '0';
@@ -123,8 +139,6 @@ if (btn) {
           btn.classList.add('btn-outline-primary');
           btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Follow';
 
-          // Decrement follower count if viewing *their* profile
-          const countEl = document.getElementById('followers-count');
           if (countEl) {
             const n = parseInt(countEl.textContent || '0', 10) || 0;
             countEl.textContent = Math.max(0, n - 1);
@@ -136,7 +150,6 @@ if (btn) {
           btn.classList.add('btn-outline-danger');
           btn.innerHTML = '<i class="fa-solid fa-user-minus"></i> Unfollow';
 
-          const countEl = document.getElementById('followers-count');
           if (countEl) {
             const n = parseInt(countEl.textContent || '0', 10) || 0;
             countEl.textContent = n + 1;

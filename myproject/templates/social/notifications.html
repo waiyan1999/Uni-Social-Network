@@ -1,5 +1,8 @@
 {% extends "social/base.html" %}
+{% load static humanize %}
+
 {% block title %}Notifications{% endblock %}
+
 {% block content %}
 <div class="row">
   <div class="col-lg-7 mx-auto">
@@ -15,28 +18,64 @@
       {% for n in notifications %}
         <div class="list-group-item d-flex justify-content-between align-items-center {% if not n.is_read %}list-group-item-warning{% endif %}" data-id="{{ n.id }}">
           <div class="me-2">
+            {# ---------- Actor display (full_name -> first/last -> email -> username) ---------- #}
             {% if n.actor %}
-              <strong>{{ n.actor.get_full_name|default:n.actor.email }}</strong>
+              <a class="fw-semibold text-decoration-none" href="{% url 'social:profile-detail' n.actor.id %}">
+                {% with pf=n.actor.profile %}
+                  {% if pf and pf.full_name %}
+                    {{ pf.full_name }}
+                  {% elif n.actor.first_name or n.actor.last_name %}
+                    {{ n.actor.first_name }}{% if n.actor.last_name %} {{ n.actor.last_name }}{% endif %}
+                  {% elif n.actor.email %}
+                    {{ n.actor.email }}
+                  {% else %}
+                    {{ n.actor.username }}
+                  {% endif %}
+                {% endwith %}
+              </a>
+            {% else %}
+              <strong>Someone</strong>
             {% endif %}
-            {{ n.verb }}
-            <span class="text-muted small">· {{ n.created_at|date:"M d, Y H:i" }}</span>
+
+            {# ---------- Text + post link + excerpt (from n.extra) ---------- #}
+            {% with ex=n.extra %}
+              {% if n.verb == 'commented' %}
+                commented on
+                {% if ex and ex.post_id %}
+                  <a class="text-decoration-none" href="{% url 'social:post-detail' ex.post_id %}">your post</a>
+                {% else %}
+                  your post
+                {% endif %}
+                {% if ex and ex.comment_excerpt %}
+                  : <span class="text-muted">"{{ ex.comment_excerpt|truncatechars:80 }}"</span>
+                {% elif ex and ex.post_excerpt %}
+                  : <span class="text-muted">"{{ ex.post_excerpt|truncatechars:80 }}"</span>
+                {% endif %}
+              {% elif n.verb == 'liked' %}
+                liked
+                {% if ex and ex.post_id %}
+                  <a class="text-decoration-none" href="{% url 'social:post-detail' ex.post_id %}">your post</a>
+                {% else %}
+                  your post
+                {% endif %}
+              {% else %}
+                {{ n.verb }}
+                {% if ex and ex.post_id %}
+                  <a class="text-decoration-none" href="{% url 'social:post-detail' ex.post_id %}">your post</a>
+                {% endif %}
+                {% if ex and ex.post_excerpt %}
+                  : <span class="text-muted">"{{ ex.post_excerpt|truncatechars:80 }}"</span>
+                {% endif %}
+              {% endif %}
+            {% endwith %}
+
+            {# ---------- Human time: "x ago" ---------- #}
+            <span class="text-muted small">· {{ n.created_at|timesince }} ago</span>
           </div>
 
           <div class="d-flex align-items-center gap-2">
-            <button class="btn btn-sm btn-outline-secondary view-detail" data-id="{{ n.id }}" data-kind="drf">
-              View
-            </button>
-
-            <button class="btn btn-sm btn-outline-primary mark-read"
-                    data-id="{{ n.id }}"
-                    data-kind="drf"
-                    {% if n.is_read %}disabled{% endif %}>
-              {% if n.is_read %}Read{% else %}Mark read{% endif %}
-            </button>
-
-            <button class="btn btn-sm btn-outline-danger delete-item" data-id="{{ n.id }}" data-kind="drf">
-              Delete
-            </button>
+            <button class="btn btn-sm btn-outline-secondary view-detail" data-id="{{ n.id }}">View</button>
+            <button class="btn btn-sm btn-outline-danger delete-item" data-id="{{ n.id }}">Delete</button>
           </div>
         </div>
       {% empty %}
@@ -44,13 +83,14 @@
       {% endfor %}
     </div>
 
+    {# Optional pagination include #}
     {% include "social/pagination.html" %}
   </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<!-- Bootstrap Modal -->
+<!-- Detail Modal -->
 <div class="modal fade" id="notifDetailModal" tabindex="-1" aria-labelledby="notifDetailLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-scrollable">
     <div class="modal-content">
@@ -69,7 +109,7 @@
 </div>
 
 <script>
-/** ---------- CSRF + Fetch Helpers ---------- */
+/* ---------- CSRF helper ---------- */
 function getCookie(name) {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
@@ -78,6 +118,7 @@ function getCookie(name) {
 }
 const CSRF = getCookie('csrftoken');
 
+/* ---------- Fetch wrapper ---------- */
 async function apiFetch(url, {method='GET', data=null, headers={}} = {}) {
   const opts = { method, headers: { 'X-Requested-With': 'XMLHttpRequest', ...headers } };
   if (!['GET','HEAD'].includes(method)) {
@@ -91,20 +132,21 @@ async function apiFetch(url, {method='GET', data=null, headers={}} = {}) {
   return { ok: res.ok, status: res.status, data: json };
 }
 
-/** ---------- DOM helpers ---------- */
+/* ---------- Small DOM helpers ---------- */
 function markRowAsRead(row) {
-  row.classList.remove('list-group-item-warning');
-  row.querySelectorAll('.mark-read').forEach(btn => {
-    btn.textContent = 'Read';
-    btn.disabled = true;
-  });
-}
-function markAllButtonsRead() {
-  document.querySelectorAll('#notif-list .list-group-item').forEach(markRowAsRead);
+  row?.classList.remove('list-group-item-warning');
+  const badge = document.getElementById('notif-badge');
+  if (badge && !badge.classList.contains('d-none')) {
+    const cur = parseInt(badge.textContent || '0', 10);
+    if (!Number.isNaN(cur) && cur > 0) {
+      const next = cur - 1;
+      badge.textContent = String(next);
+      if (next <= 0) badge.classList.add('d-none');
+    }
+  }
 }
 function removeRow(row) {
   row?.parentNode?.removeChild(row);
-  // Empty state if needed
   if (!document.querySelector('#notif-list .list-group-item')) {
     const empty = document.createElement('div');
     empty.className = 'alert alert-light border';
@@ -116,125 +158,125 @@ function clearAllRows() {
   document.getElementById('notif-list').innerHTML = '<div class="alert alert-light border">No notifications.</div>';
 }
 
-/** ---------- DRF endpoints ---------- */
-async function markReadDRF(id, row) {
-  const url = `/api/notifications/${id}/`;
-  const { ok, data } = await apiFetch(url, { method: 'PATCH', data: { is_read: true } });
-  if (ok) markRowAsRead(row);
-}
+/* ---------- API endpoints ---------- */
+async function fetchDetail(id)   { return apiFetch(`/api/notifications/${id}/`, { method: 'GET' }); }
+async function patchRead(id)     { return apiFetch(`/api/notifications/${id}/`, { method: 'PATCH', data: { is_read: true } }); }
+async function deleteItem(id)    { return apiFetch(`/api/notifications/${id}/`, { method: 'DELETE' }); }
+async function markAllRead()     { return apiFetch(`/api/notifications/mark_all_read/`, { method: 'POST', data: {} }); }
+async function deleteAll()       { return apiFetch(`/api/notifications/delete_all/`, { method: 'POST', data: {} }); }
 
-async function viewDetailDRF(id) {
-  const url = `/api/notifications/${id}/`;
-  return apiFetch(url, { method: 'GET' }); // expects JSON detail
+/* ---------- Modal rendering (expects serializer extra fields) ---------- */
+function esc(text) {
+  const div = document.createElement('div');
+  div.textContent = text ?? '';
+  return div.innerHTML;
 }
-
-async function deleteItemDRF(id) {
-  const url = `/api/notifications/${id}/`;
-  return apiFetch(url, { method: 'DELETE' });
-}
-
-async function deleteAllDRF() {
-  // custom action
-  const url = `/api/notifications/delete_all/`;
-  return apiFetch(url, { method: 'POST', data: {} });
-}
-
-async function markAllReadDRF() {
-  const url = `/api/notifications/mark_all_read/`;
-  return apiFetch(url, { method: 'POST', data: {} });
-}
-
-/** ---------- Modal rendering ---------- */
 function renderDetailIntoModal(payload) {
   const body = document.getElementById('notif-detail-body');
-  if (!payload) {
-    body.innerHTML = '<div class="text-danger small">No data.</div>';
-    return;
-  }
-  // The serializer should expose these fields; fall back if missing.
-  const actor = payload.actor_name || payload.actor_email || 'Someone';
-  const verb = payload.verb || 'did something';
-  const created = payload.created_at || '';
-  const extra = payload.extra || null;     // optional dict
-  const link  = payload.link || payload.url || null; // optional URL to target
+  if (!payload) { body.innerHTML = '<div class="text-danger small">No data.</div>'; return; }
+
+  const actorName  = payload.actor_name || payload.actor_email || 'Someone';
+  const actorUrl   = payload.actor_profile_url || null;
+  const verb       = payload.verb || 'did something';
+  const createdH   = payload.created_at_human || '';     // e.g. “3 minutes ago”
+  const targetUrl  = payload.target_url || null;         // post link
+  const preview    = payload.preview || null;            // comment/post excerpt
+  const post       = payload.target_post || null;        // { id,url,text,photo_url,created_at_human,author_* }
+
+  const actorHTML = actorUrl
+    ? `<a href="${actorUrl}" class="fw-semibold text-decoration-none">${esc(actorName)}</a>`
+    : `<strong>${esc(actorName)}</strong>`;
+
+  let top = `${actorHTML} ${esc(verb)}`;
+  if (targetUrl) top += ` <a href="${targetUrl}" class="text-decoration-none">your post</a>`;
 
   let html = `
-    <div class="mb-2"><strong>${actor}</strong> ${verb}</div>
-    ${created ? `<div class="text-muted small mb-2">${created}</div>` : ''}
+    <div class="mb-2">${top}</div>
+    ${createdH ? `<div class="text-muted small mb-2">${esc(createdH)} </div>` : ''}
+
+    {% comment %}
+     ${preview ? `<div class="mb-3"><span class="text-muted">"${esc(preview)} "</span></div>` : ''}
+    {% endcomment %}
   `;
 
-  if (extra && typeof extra === 'object') {
-    html += `<div class="mb-2"><pre class="mb-0" style="white-space:pre-wrap;">${JSON.stringify(extra, null, 2)}</pre></div>`;
+  if (post) {
+    html += `
+      <div class="card border-0 shadow-sm bg-primary-subtle">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <div>
+              ${post.author_profile_url
+                ? `<a href="${post.author_profile_url}" class="fw-semibold text-decoration-none">${esc(post.author_name || '')}</a>`
+                : `<span class="fw-semibold">${esc(post.author_name || '')}</span>`}
+              ${post.created_at_human ? `<div class="text-muted small">${esc(post.created_at_human)}</div>` : ''}
+            </div>
+            ${post.url ? `<a href="${post.url}" class="btn btn-sm btn-outline-primary">Open post</a>` : ''}
+          </div>
+          ${post.text ? `<p class="mb-2">${esc(post.text)}</p>` : ''}
+          ${post.photo_url ? `<img src="${post.photo_url}" alt="Post image" class="img-fluid rounded">` : ''}
+        </div>
+      </div>
+    `;
   }
-  if (link) {
-    html += `<a class="btn btn-sm btn-outline-primary" href="${link}">Open related item</a>`;
-  }
+
   body.innerHTML = html;
 }
 
-/** ---------- Wire up (event delegation) ---------- */
+/* ---------- Click handlers ---------- */
 document.addEventListener('click', async (e) => {
   const row = e.target.closest('.list-group-item');
-  // Per-item: Mark read
-  if (e.target.closest('.mark-read')) {
-    const btn = e.target.closest('.mark-read');
-    const id = btn.dataset.id;
-    btn.disabled = true;
-    try { 
-      await markReadDRF(id, row);
-    } catch (err) {
-      btn.disabled = false;
-      console.error(err);
-    }
-  }
 
-  // Per-item: View detail
+  // View detail: open modal + mark as read
   if (e.target.closest('.view-detail')) {
-    const btn = e.target.closest('.view-detail');
-    const id = btn.dataset.id;
-    const detailModal = new bootstrap.Modal(document.getElementById('notifDetailModal'));
-    document.getElementById('notif-detail-body').innerHTML = '<div class="text-muted small">Loading…</div>';
-    detailModal.show();
+    const id = e.target.closest('.view-detail').dataset.id;
+    const modal = new bootstrap.Modal(document.getElementById('notifDetailModal'));
+    document.getElementById('notif-detail-body').innerHTML = '<div class="text-muted small ">Loading…</div>';
+    modal.show();
+
     try {
-      const { ok, data } = await viewDetailDRF(id);
+      const { ok, data } = await fetchDetail(id);
       if (ok) renderDetailIntoModal(data);
       else document.getElementById('notif-detail-body').innerHTML = '<div class="text-danger small">Failed to load.</div>';
     } catch (err) {
       document.getElementById('notif-detail-body').innerHTML = '<div class="text-danger small">Error occurred.</div>';
     }
+
+    try {
+      const { ok } = await patchRead(id);
+      if (ok) markRowAsRead(row);
+    } catch (_) {}
   }
 
-  // Per-item: Delete
+  // Delete a single notification
   if (e.target.closest('.delete-item')) {
     const btn = e.target.closest('.delete-item');
     const id = btn.dataset.id;
     btn.disabled = true;
     try {
-      const { ok } = await deleteItemDRF(id);
-      if (ok) removeRow(row);
-      else btn.disabled = false;
+      const { ok } = await deleteItem(id);
+      if (ok) removeRow(row); else btn.disabled = false;
     } catch (err) {
       btn.disabled = false;
       console.error(err);
     }
   }
 
-  // Bulk: Mark all read
+  // Bulk: mark all as read
   if (e.target.id === 'read-all-drf') {
     e.preventDefault();
     const b = e.target; b.disabled = true;
     try {
-      const { ok } = await markAllReadDRF();
-      if (ok) markAllButtonsRead();
+      const { ok } = await markAllRead();
+      if (ok) document.querySelectorAll('#notif-list .list-group-item').forEach(markRowAsRead);
     } finally { b.disabled = false; }
   }
 
-  // Bulk: Delete all
+  // Bulk: delete all
   if (e.target.id === 'delete-all-drf') {
     e.preventDefault();
     const b = e.target; b.disabled = true;
     try {
-      const { ok } = await deleteAllDRF();
+      const { ok } = await deleteAll();
       if (ok) clearAllRows();
     } finally { b.disabled = false; }
   }

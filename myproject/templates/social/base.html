@@ -5,230 +5,115 @@
   <meta charset="utf-8">
   <title>{% block title %}Uni Social{% endblock %}</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+
   <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
+  <!-- Font Awesome -->
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
-  
+
   <style>
     body { background: #e1e7f3; }
     .card { border: 0; box-shadow: 0 2px 10px rgba(0,0,0,.04); }
     .avatar { width:44px; height:44px; border-radius:50%; object-fit:cover; }
     .post-photo { max-height: 540px; object-fit: cover; }
+    /* Toast sizing */
+    .toast { max-width: 360px; }
+    @media (max-width: 576px) {
+      .toast-container { width: 100%; left: 0; right: 0; }
+      .toast { width: 100%; max-width: none; }
+    }
   </style>
+
   {% block extra_head %}{% endblock %}
 </head>
 <body>
   {% include "social/nav_bar.html" %}
 
   <main class="container py-4">
-    {% comment %}
-    {% if messages %}
-      <div class="mb-3">
-        {% for m in messages %}
-          <div class="alert alert-{{ m.tags|default:'info' }} mb-2">{{ m }}</div>
-        {% endfor %}
-      </div>
-    {% endif %}
-    {% endcomment %}
-
     <!-- Toasts (top-right) -->
-<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1080;">
-  {% if messages %}
-    {% for m in messages %}
-      <div class="toast fade border-0 shadow-lg mb-2
-                  {% if 'success' in m.tags %}text-bg-light
-                  {% elif 'error' in m.tags or 'danger' in m.tags %}text-bg-danger
-                  {% elif 'warning' in m.tags %}text-bg-warning
-                  {% else %}text-bg-info{% endif %}"
-           role="alert" aria-live="assertive" aria-atomic="true"
-           data-bs-autohide="true" data-bs-delay="3000">
-        <div class="toast-header border-0 bg-transparent">
-          <strong class="me-auto">UniSocial</strong>
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1080;">
+      {% if messages %}
+        {% for m in messages %}
+          <div class="toast fade border-0 shadow-lg mb-2
+                      {% if 'success' in m.tags %}text-bg-light
+                      {% elif 'error' in m.tags or 'danger' in m.tags %}text-bg-danger
+                      {% elif 'warning' in m.tags %}text-bg-warning
+                      {% else %}text-bg-info{% endif %}"
+               role="alert" aria-live="assertive" aria-atomic="true"
+               data-bs-autohide="true" data-bs-delay="3000">
+            <div class="toast-header border-0 bg-transparent">
+              <strong class="me-auto">UniSocial</strong>
+              <span class="badge text-uppercase ms-2
+                           {% if 'success' in m.tags %}text-bg-success
+                           {% elif 'error' in m.tags or 'danger' in m.tags %}text-bg-danger
+                           {% elif 'warning' in m.tags %}text-bg-warning
+                           {% else %}text-bg-info{% endif %}">
+                {% if 'success' in m.tags %}Success
+                {% elif 'error' in m.tags or 'danger' in m.tags %}Error
+                {% elif 'warning' in m.tags %}Warning
+                {% else %}Info{% endif %}
+              </span>
+              <small class="ms-2 opacity-75">just now</small>
+              <button type="button"
+                      class="btn-close ms-2 {% if 'warning' in m.tags %}{% else %}btn-close-dark{% endif %}"
+                      data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">{{ m }}</div>
+          </div>
+        {% endfor %}
+      {% endif %}
+    </div>
 
-          <span class="badge text-uppercase ms-2
-                       {% if 'success' in m.tags %}text-bg-success
-                       {% elif 'error' in m.tags or 'danger' in m.tags %}text-bg-danger
-                       {% elif 'warning' in m.tags %}text-bg-warning
-                       {% else %}text-bg-info{% endif %}">
-            {% if 'success' in m.tags %}Success
-            {% elif 'error' in m.tags or 'danger' in m.tags %}Error
-            {% elif 'warning' in m.tags %}Warning
-            {% else %}Info{% endif %}
-          </span>
+    {% block content %}{% endblock %}
+  </main>
 
-          <small class="ms-2 opacity-75">just now</small>
-          <button type="button"
-                  class="btn-close ms-2 {% if 'warning' in m.tags %}{% else %}btn-close-dark{% endif %}"
-                  data-bs-dismiss="toast" aria-label="Close"></button>
-        </div>
-        <div class="toast-body">
-          {{ m }}
-        </div>
-      </div>
-    {% endfor %}
-  {% endif %}
-</div>
+  <!-- Bootstrap Bundle (must load before scripts that use `bootstrap`) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
+  <!-- Shared helpers (CSRF, fetch, notif badge, global like/save handlers, delete modal) -->
+  <script>
+  // --- CSRF + fetch helpers ---
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i=0; i<cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+  const CSRF_TOKEN = getCookie('csrftoken');
 
+  async function apiFetch(url, {method='GET', data=null, headers={}} = {}) {
+    const opts = { method, headers: { 'X-Requested-With': 'XMLHttpRequest', ...headers } };
+    if (!['GET','HEAD'].includes(method)) {
+      if (headers['Content-Type'] !== 'application/x-www-form-urlencoded') {
+        opts.headers['Content-Type'] = 'application/json';
+        if (data) opts.body = JSON.stringify(data);
+      } else {
+        // when explicitly using x-www-form-urlencoded
+        opts.body = new URLSearchParams(data || {});
+      }
+      if (CSRF_TOKEN) opts.headers['X-CSRFToken'] = CSRF_TOKEN;
+    }
+    const res = await fetch(url, opts);
+    let json = null; try { json = await res.json(); } catch(_){}
+    return { ok: res.ok, status: res.status, data: json };
+  }
 
-<script>
+  // --- Toasts (initialize after bootstrap is available) ---
   document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll('.toast').forEach(function (el) {
       new bootstrap.Toast(el).show();
     });
   });
-</script>
 
-<style>
-  /* Optional: nicer sizing on large screens */
-  .toast { max-width: 360px; }
-  @media (max-width: 576px) {
-    .toast-container { width: 100%; left: 0; right: 0; }
-    .toast { width: 100%; max-width: none; }
-  }
-</style>
-
-
-
-    {% block content %}{% endblock %}
-  </main>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    // CSRF helper for fetch()
-    function getCookie(name) {
-      let cookieValue = null;
-      if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i=0; i<cookies.length; i++) {
-          const cookie = cookies[i].trim();
-          if (cookie.substring(0, name.length + 1) === (name + '=')) {
-            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-            break;
-          }
-        }
-      }
-      return cookieValue;
-    }
-    const csrftoken = getCookie('csrftoken');
-    function postJSON(url, body) {
-      return fetch(url, {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(body || {})
-      }).then(r => r.json());
-    }
-  </script>
-  <script>
-async function refreshNotifBadge() {
-  try {
-    const res = await fetch('/api/notifications/unread_count/', {
-      headers: {'X-Requested-With': 'XMLHttpRequest'}
-    });
-    if (!res.ok) return;
-    const { count } = await res.json();
-    const badge = document.getElementById('notif-badge');
-    if (!badge) return;
-
-    if (count > 0) {
-      badge.textContent = count > 99 ? '99+' : count;
-      badge.classList.remove('d-none');
-    } else {
-      badge.textContent = '';
-      badge.classList.add('d-none');
-    }
-  } catch (_) {}
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  refreshNotifBadge();
-  // Optional polling: refresh every 30s
-  setInterval(refreshNotifBadge, 30000);
-});
-
-// make available to other scripts/templates
-window.refreshNotifBadge = refreshNotifBadge;
-</script>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  // Only wire handlers if the notifications list exists on this page.
-  const notifList = document.getElementById('notif-list');
-  if (!notifList) return;
-
-  document.addEventListener('click', async (e) => {
-    const row = e.target.closest('.list-group-item');
-
-    // Per-item: Mark read
-    if (e.target.closest('.mark-read') && typeof markReadDRF === 'function') {
-      const btn = e.target.closest('.mark-read');
-      const id = btn.dataset.id;
-      btn.disabled = true;
-      try {
-        const ok = await markReadDRF(id);
-        if (ok) {
-          markRowAsRead(row);
-          if (window.refreshNotifBadge) refreshNotifBadge();
-        } else {
-          btn.disabled = false;
-        }
-      } catch (err) {
-        btn.disabled = false;
-        console.error(err);
-      }
-    }
-
-    // Bulk: Mark all read
-    if (e.target.id === 'read-all-drf' && typeof markAllReadDRF === 'function') {
-      e.preventDefault();
-      const b = e.target; b.disabled = true;
-      try {
-        const { ok } = await markAllReadDRF();
-        if (ok) {
-          markAllButtonsRead();
-          if (window.refreshNotifBadge) refreshNotifBadge();
-        }
-      } finally { b.disabled = false; }
-    }
-
-    // Per-item: Delete
-    if (e.target.closest('.delete-item') && typeof deleteItemDRF === 'function') {
-      const btn = e.target.closest('.delete-item');
-      const id = btn.dataset.id;
-      btn.disabled = true;
-      try {
-        const { ok } = await deleteItemDRF(id);
-        if (ok) {
-          removeRow(row);
-          if (window.refreshNotifBadge) refreshNotifBadge();
-        } else {
-          btn.disabled = false;
-        }
-      } catch (err) {
-        btn.disabled = false;
-        console.error(err);
-      }
-    }
-
-    // Bulk: Delete all
-    if (e.target.id === 'delete-all-drf' && typeof deleteAllDRF === 'function') {
-      e.preventDefault();
-      const b = e.target; b.disabled = true;
-      try {
-        const { ok } = await deleteAllDRF();
-        if (ok) {
-          clearAllRows();
-          if (window.refreshNotifBadge) refreshNotifBadge();
-        }
-      } finally { b.disabled = false; }
-    }
-  });
-});
-</script>
-
-<!-- Notifications badge: global helpers only -->
-  <script>
+  // --- Notification badge helpers (single implementation) ---
   function getBadgeEl(){ return document.getElementById('notif-badge'); }
   function setBadgeCount(n){
     const el = getBadgeEl(); if(!el) return;
@@ -240,13 +125,6 @@ document.addEventListener('DOMContentLoaded', () => {
       el.classList.add('d-none');
     }
   }
-  function getBadgeCount(){
-    const el = getBadgeEl(); if(!el) return 0;
-    const n = parseInt((el.textContent || '').trim(), 10);
-    return Number.isFinite(n) ? n : 0;
-  }
-  function decBadgeCount(by = 1){ setBadgeCount(Math.max(0, getBadgeCount() - by)); }
-
   async function refreshNotifBadge(){
     try{
       const res = await fetch('/api/notifications/unread_count/', {
@@ -265,15 +143,69 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshNotifBadge();
     // setInterval(refreshNotifBadge, 30000); // optional polling
   });
-  </script>
 
-  <script>
-  // Get CSRF token from cookie (Django default)
-  function getCookie(name) {
-    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-    return m ? m.pop() : '';
-  }
+  // --- Global like/save (event delegation) ---
+  document.addEventListener('click', async (e) => {
+    // LIKE
+    const likeBtn = e.target.closest('.like-btn');
+    if (likeBtn) {
+      const postId = likeBtn.dataset.id;
+      likeBtn.disabled = true;
+      try {
+        const { ok, data } = await apiFetch(`/posts/${postId}/like/`, { method: 'POST' });
+        if (ok && data) {
+          // count
+          const countEl = document.getElementById(`like-count-${postId}`);
+          if (countEl && typeof data.likes_count !== 'undefined') countEl.textContent = data.likes_count;
 
+          // icon/state
+          const i = likeBtn.querySelector('i');
+          if (data.liked) {
+            likeBtn.classList.remove('btn-outline-primary');
+            likeBtn.classList.add('btn-primary');
+            if (i) i.className = 'fa-solid fa-thumbs-up me-1';
+          } else {
+            likeBtn.classList.add('btn-outline-primary');
+            likeBtn.classList.remove('btn-primary');
+            if (i) i.className = 'fa-regular fa-thumbs-up me-1';
+          }
+        }
+      } finally {
+        likeBtn.disabled = false;
+      }
+      return;
+    }
+
+    // SAVE (if you add a .save-btn in your card)
+    const saveBtn = e.target.closest('.save-btn');
+    if (saveBtn) {
+      const postId = saveBtn.dataset.id;
+      saveBtn.disabled = true;
+      try {
+        const { ok, data } = await apiFetch(`/posts/${postId}/save/`, { method: 'POST' });
+        if (ok && data) {
+          const countEl = document.getElementById(`save-count-${postId}`);
+          if (countEl && typeof data.saves_count !== 'undefined') countEl.textContent = data.saves_count;
+
+          const i = saveBtn.querySelector('i');
+          if (data.saved) {
+            saveBtn.classList.remove('btn-outline-secondary');
+            saveBtn.classList.add('btn-secondary');
+            if (i) i.className = 'fa-solid fa-bookmark me-1';
+          } else {
+            saveBtn.classList.add('btn-outline-secondary');
+            saveBtn.classList.remove('btn-secondary');
+            if (i) i.className = 'fa-regular fa-bookmark me-1';
+          }
+        }
+      } finally {
+        saveBtn.disabled = false;
+      }
+      return;
+    }
+  });
+
+  // --- Delete post modal (AJAX) ---
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.delete-post-form').forEach(function (form) {
       form.addEventListener('submit', async function (e) {
@@ -285,7 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const res = await fetch(url, {
             method: 'POST',
             headers: {
-              'X-CSRFToken': getCookie('csrftoken'),
+              'X-CSRFToken': CSRF_TOKEN,
               'X-Requested-With': 'XMLHttpRequest'
             }
           });
@@ -296,13 +228,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
             modal.hide();
 
-            // Remove the post card from the DOM
+            // Remove the card
             const card = document.getElementById(`post-card-${postId}`);
             if (card) card.remove();
           } else if (res.status === 403) {
             alert('You can delete only your own post.');
           } else {
-            // Fallback: reload if unexpected
             window.location.reload();
           }
         } catch (err) {
@@ -312,14 +243,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   });
-</script>
+  </script>
 
-
-
-  {% block extra_js %}
-
-  
-  
-  {% endblock %}
+  {% block extra_js %}{% endblock %}
 </body>
 </html>
