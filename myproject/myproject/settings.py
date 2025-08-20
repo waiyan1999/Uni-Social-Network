@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'api',
     'accounts',
     "django.contrib.humanize",
+    "admindashboard.apps.AdmindashboardConfig",
     
 ]
 

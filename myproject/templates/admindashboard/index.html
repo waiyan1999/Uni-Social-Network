@@ -1,0 +1,372 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>University Social Network Admin Dashboard</title>
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
+
+  <style>
+    :root{
+      --sidebar-w: 260px;
+    }
+    body { background:#fff; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+
+    /* Layout */
+    .app { min-height: 100vh; }
+
+    /* Sidebar (desktop) */
+    .sidebar {
+      width: var(--sidebar-w);
+      border-right: 1px solid #e5e7eb;
+      background: #f8fafc;
+    }
+    .sidebar .brand {
+      padding: 1rem 1rem .5rem;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .sidebar .nav-link {
+      display:flex; align-items:center; gap:.6rem;
+      border-radius: .5rem;
+      color:#111827;
+      margin: .125rem .5rem;
+    }
+    .sidebar .nav-link.active, .sidebar .nav-link:hover {
+      background:#0d6efd; color:#fff;
+    }
+
+    /* Content (desktop) */
+    .content {
+      flex: 1 1 auto;
+      padding: 1rem;
+    }
+
+    /* Topbar */
+    .topbar {
+      display:flex; align-items:center; justify-content:space-between;
+      padding: .75rem 0 1rem;
+      border-bottom: 1px solid #e5e7eb;
+      margin-bottom: 1rem;
+    }
+    .brand-title { margin:0; display:flex; align-items:center; gap:.6rem; }
+
+    .table thead th { background:#f8f9fa; }
+    .avatar { width:40px; height:40px; border-radius:50%; object-fit:cover; border:1px solid #e5e7eb; }
+    .muted { color:#6b7280; }
+    .nowrap { white-space:nowrap; }
+
+    /* Desktop: fixed sidebar, content with left margin (≥ lg) */
+    @media (min-width: 992px) {
+      .layout {
+        display: grid;
+        grid-template-columns: var(--sidebar-w) 1fr;
+      }
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+      .content {
+        padding: 1.25rem 1.5rem 2rem;
+      }
+      .topbar .mobile-only { display:none !important; }
+    }
+
+    /* Mobile: sidebar becomes offcanvas */
+    @media (max-width: 991.98px) {
+      .sidebar { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- Mobile Offcanvas Sidebar -->
+    <div class="offcanvas offcanvas-start" tabindex="-1" id="mobileSidebar" aria-labelledby="mobileSidebarLabel">
+      <div class="offcanvas-header">
+        <h5 class="offcanvas-title d-flex align-items-center gap-2" id="mobileSidebarLabel">
+          <i class="fa-solid fa-graduation-cap"></i> Admin
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+      </div>
+      <div class="offcanvas-body d-flex flex-column">
+        <a class="nav-link d-flex align-items-center gap-2 mb-1" href="#top">
+          <i class="fa-solid fa-house"></i> Dashboard
+        </a>
+        <a class="nav-link d-flex align-items-center gap-2 mb-1" href="#users" data-bs-dismiss="offcanvas">
+          <i class="fa-regular fa-user"></i> Users
+        </a>
+        <a class="nav-link d-flex align-items-center gap-2 mb-3" href="#posts" data-bs-dismiss="offcanvas">
+          <i class="fa-regular fa-file-lines"></i> Posts
+        </a>
+        <a class="btn btn-outline-dark mb-2" href="{% url 'admin:index' %}">
+          <i class="fa-solid fa-screwdriver-wrench me-2"></i> Django Admin
+        </a>
+        <form method="post" action="{% url 'accounts:logout' %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-danger w-100">
+            <i class="fa-solid fa-right-from-bracket me-2"></i> Logout
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="layout">
+
+      <!-- Desktop Sidebar -->
+      <aside class="sidebar d-none d-lg-flex flex-column">
+        <div class="brand d-flex align-items-center gap-2">
+          <i class="fa-solid fa-graduation-cap"></i>
+          <strong>Admin</strong>
+        </div>
+        <nav class="p-2">
+          <a class="nav-link active" href="#top"><i class="fa-solid fa-house"></i> Dashboard</a>
+          <a class="nav-link" href="#users"><i class="fa-regular fa-user"></i> Users</a>
+          <a class="nav-link" href="#posts"><i class="fa-regular fa-file-lines"></i> Posts</a>
+          <hr>
+          <a class="nav-link" href="{% url 'admin:index' %}"><i class="fa-solid fa-screwdriver-wrench"></i> Django Admin</a>
+          <form method="post" action="{% url 'accounts:logout' %}" class="mt-2 px-1">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm w-100 btn-outline-danger">
+              <i class="fa-solid fa-right-from-bracket me-2"></i> Logout
+            </button>
+          </form>
+        </nav>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="content" id="top">
+        <!-- Top bar -->
+        <div class="topbar">
+          <div class="brand-title">
+            <!-- Mobile: sidebar toggle -->
+            <button class="btn btn-outline-secondary btn-sm mobile-only" type="button"
+                    data-bs-toggle="offcanvas" data-bs-target="#mobileSidebar" aria-controls="mobileSidebar">
+              <i class="fa-solid fa-bars"></i>
+            </button>
+            <i class="fa-solid fa-graduation-cap d-none d-lg-inline"></i>
+            <h4 class="m-0">University Social Network Admin Dashboard</h4>
+          </div>
+
+          <!-- Desktop logout -->
+           {% comment %}
+          <form method="post" action="{% url 'accounts:logout' %}" class="m-0 d-none d-lg-block">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger">
+              <i class="fa-solid fa-right-from-bracket me-2"></i> Logout ff
+            </button>
+          </form>
+          {% endcomment %}
+
+          <!-- Mobile quick actions -->
+          <div class="mobile-only d-flex align-items-center gap-2">
+            <a class="btn btn-outline-dark btn-sm" href="{% url 'admin:index' %}">
+              <i class="fa-solid fa-screwdriver-wrench"></i>
+            </a>
+            <form method="post" action="{% url 'accounts:logout' %}" class="m-0">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="fa-solid fa-right-from-bracket"></i>
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Stat cards -->
+        <div class="row g-3 mb-4">
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-body">
+                <div class="text-muted">Total Users</div>
+                <div class="fs-3 fw-bold" id="stat-users">{{ total_users }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-body">
+                <div class="text-muted">Total Posts</div>
+                <div class="fs-3 fw-bold" id="stat-posts">{{ total_posts }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Users Table -->
+        <div id="users" class="card shadow-sm mb-4">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h5 class="m-0">All Users</h5>
+              <div class="text-muted small">Page {{ users_page.number }} / {{ users_page.paginator.num_pages }}</div>
+            </div>
+            <div class="table-responsive">
+              <table class="table align-middle">
+                <thead>
+                  <tr>
+                    <th>Avatar</th>
+                    <th>Name / Email</th>
+                    <th>Email</th>
+                    <th>Joined</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for u in users_page %}
+                  <tr>
+                    <td style="width:60px">
+                      {% if u.profile and u.profile.photo %}
+                        <img class="avatar" src="{{ u.profile.photo.url }}" alt="avatar">
+                      {% else %}
+                        <div class="avatar d-flex align-items-center justify-content-center bg-light">
+                          <i class="fa-regular fa-user text-secondary"></i>
+                        </div>
+                      {% endif %}
+                    </td>
+                    <td class="fw-semibold">
+                      {{ u.profile.full_name|default:u.email }}
+                    </td>
+                    <td class="text-muted">{{ u.email }}</td>
+                    <td class="text-muted nowrap">{{ u.date_joined|date:"Y-m-d H:i" }}</td>
+                    <td class="text-end">
+                      <!-- Adjust URL name if needed -->
+                      <a class="btn btn-sm btn-outline-primary" href="{% url 'social:profile-detail' u.pk %}">
+                        <i class="fa-regular fa-id-card"></i> Profile
+                      </a>
+                    </td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="5" class="text-center text-muted">No users.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Users pagination -->
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="small text-muted">Showing {{ users_page|length }} of {{ users_page.paginator.count }} users</div>
+              <div class="d-flex gap-2">
+                {% if users_page.has_previous %}
+                  <a class="btn btn-sm btn-outline-secondary" href="?u={{ users_page.previous_page_number }}&p={{ posts_page.number }}&u_size={{ u_size }}&p_size={{ p_size }}">
+                    <i class="fa-solid fa-chevron-left"></i> Prev
+                  </a>
+                {% endif %}
+                {% if users_page.has_next %}
+                  <a class="btn btn-sm btn-outline-secondary" href="?u={{ users_page.next_page_number }}&p={{ posts_page.number }}&u_size={{ u_size }}&p_size={{ p_size }}">
+                    Next <i class="fa-solid fa-chevron-right"></i>
+                  </a>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Posts Table -->
+        <div id="posts" class="card shadow-sm mb-4">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h5 class="m-0">All Posts</h5>
+              <div class="text-muted small">Page {{ posts_page.number }} / {{ posts_page.paginator.num_pages }}</div>
+            </div>
+            <div class="table-responsive">
+              <table class="table align-middle">
+                <thead>
+                  <tr>
+                    <th>Author</th>
+                    <th>Text</th>
+                    <th>Created</th>
+                    <th>Comments</th>
+                    <th>Likes</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for p in posts_page %}
+                  <tr>
+                    <td class="fw-semibold">
+                      {{ p.author.profile.full_name|default:p.author.email }}
+                    </td>
+                    <td class="text-muted" style="max-width:420px;">
+                      {{ p.text|default:"(no text)" }}
+                    </td>
+                    <td class="text-muted nowrap">{{ p.created_at|date:"Y-m-d H:i" }}</td>
+                    <td class="text-muted">{{ p.num_comments }}</td>
+                    <td class="text-muted">{{ p.likes_count_eff }}</td>
+                    <td class="text-end">
+                      <div class="btn-group">
+                        <!-- Adjust URL names if needed -->
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'social:post-detail' p.pk %}">
+                          <i class="fa-regular fa-eye"></i> View Post
+                        </a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'social:profile-detail' p.author.pk %}">
+                          <i class="fa-regular fa-id-card"></i> Author Profile
+                        </a>
+                      </div>
+                    </td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="6" class="text-center text-muted">No posts.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Posts pagination -->
+            <div class="d-flex justify-content-between align-items-center">
+              <div class="small text-muted">Showing {{ posts_page|length }} of {{ posts_page.paginator.count }} posts</div>
+              <div class="d-flex gap-2">
+                {% if posts_page.has_previous %}
+                  <a class="btn btn-sm btn-outline-secondary" href="?p={{ posts_page.previous_page_number }}&u={{ users_page.number }}&u_size={{ u_size }}&p_size={{ p_size }}">
+                    <i class="fa-solid fa-chevron-left"></i> Prev
+                  </a>
+                {% endif %}
+                {% if posts_page.has_next %}
+                  <a class="btn btn-sm btn-outline-secondary" href="?p={{ posts_page.next_page_number }}&u={{ users_page.number }}&u_size={{ u_size }}&p_size={{ p_size }}">
+                    Next <i class="fa-solid fa-chevron-right"></i>
+                  </a>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Optional: quick links -->
+        <div class="mb-5 d-flex gap-2">
+          <a class="btn btn-outline-dark" href="{% url 'admin:index' %}">
+            <i class="fa-solid fa-screwdriver-wrench"></i> Django Admin
+          </a>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    // Live refresh of top stat cards (optional)
+    (async function refreshSummary(){
+      try {
+        const res = await fetch("{% url 'admindashboard:users-summary' %}", { credentials: "same-origin" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const su = document.getElementById("stat-users");
+        const sp = document.getElementById("stat-posts");
+        if (su && typeof data.total_users !== "undefined") su.textContent = data.total_users;
+        if (sp && typeof data.total_posts !== "undefined") sp.textContent = data.total_posts;
+      } catch(e) { /* ignore for now */ }
+    })();
+
+    // Highlight active nav item when using in-page anchors (desktop)
+    const links = document.querySelectorAll('.sidebar .nav-link');
+    function setActive(hash) {
+      links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === hash));
+    }
+    window.addEventListener('hashchange', () => setActive(location.hash || '#top'));
+    setActive(location.hash || '#top');
+  </script>
+</body>
+</html>

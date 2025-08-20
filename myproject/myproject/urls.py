@@ -15,6 +15,9 @@ urlpatterns = [
 
     # API
     path("api/", include("api.urls")),
+    
+    #Admin Dashboard
+    path("admin-dash/", include("admindashboard.urls", namespace="admindashboard")),
 ]
 
 urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

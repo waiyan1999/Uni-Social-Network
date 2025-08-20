@@ -122,6 +122,8 @@ def _notify_post(*, actor, recipient, post, verb, comment_text=None):
 # -----------------------------
 @login_required
 def feed(request):
+    if request.user.is_staff or request.user.is_superuser:
+        return redirect("admindashboard:home")
     qs = (
         Post.objects
         .select_related("author", "author__profile")
